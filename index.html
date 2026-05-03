@@ -653,22 +653,16 @@
           // Устгах үйлдэл
           if (item.table === '_delete_vehicles') {
             const cFilter = item.companyId ? `&company_id=eq.${item.companyId}` : '';
-            const res = await DB.delete('vehicles', `?id=eq.${item.data.id}${cFilter}`);
-            if (!res && res !== null) failed.push(item);
+            await DB_MT.delete('vehicles', `?id=eq.${item.data.id}${cFilter}`);
             continue;
           }
           // Pending item-д company_id байгаа эсэхийг шалгаж нэмэх
           if (item.companyId && !item.data.company_id) item.data.company_id = item.companyId;
-          // Давхардал байвал update хийх
-          const existing = await DB.get(item.table, `?id=eq.${item.data.id || item.data.plate}`);
-          let res;
-          if (existing && existing.length > 0) {
-            res = await DB.update(item.table, item.data, `?id=eq.${item.data.id}`);
-          } else {
-            res = await DB.insert(item.table, item.data);
-          }
+          // Шууд insert хийх — давхардвал upsert
+          const res = await DB_MT.insert(item.table, item.data);
           if (!res) failed.push(item);
         } catch(e) {
+          logError('syncItem:' + item.table, e);
           failed.push(item);
         }
       }
@@ -677,6 +671,8 @@
       updateSyncBadge();
       if (failed.length === 0) {
         showToast('✅ Бүх өгөгдөл sync боллоо');
+        // Dashboard шинэчлэх
+        if (typeof updateDashboardStats === 'function') updateDashboardStats();
       } else {
         showToast('⚠️ ' + failed.length + ' өгөгдөл sync болсонгүй');
       }
@@ -2773,7 +2769,7 @@
               <input type="text" class="form-input" placeholder="Сэлбэгийн нэр"
                 style="padding:10px 12px;font-size:12px;">
               <input type="number" class="form-input" placeholder="1"
-                style="padding:10px 8px;font-size:12px;text-align:center;">
+                style="padding:10px 8px;font-size:12px;text-align:center;" oninput="calcTotal()">
               <input type="number" class="form-input" placeholder="0"
                 style="padding:10px 8px;font-size:12px;text-align:right;" oninput="calcTotal()">
             </div>
@@ -2914,16 +2910,6 @@
                 <option>АИ-92</option>
                 <option>АИ-95</option>
               </select>
-            </div>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-            <div class="form-group">
-              <label class="form-label">Нэгжийн үнэ (₮/л)</label>
-              <input type="number" class="form-input" placeholder="0" id="fuel-price">
-            </div>
-            <div class="form-group">
-              <label class="form-label">Одометр (км)</label>
-              <input type="number" class="form-input" placeholder="0" id="fuel-odometer">
             </div>
           </div>
           <!-- Үлдэгдэл сануулга -->
@@ -4329,7 +4315,7 @@
       const div = document.createElement('div');
       div.className = 'parts-entry';
       div.style.cssText = 'display:grid;grid-template-columns:1fr 60px 90px;gap:8px;align-items:center;margin-bottom:8px;';
-      div.innerHTML = '<input type="text" class="form-input" placeholder="Сэлбэгийн нэр" style="padding:10px 12px;font-size:12px;"><input type="number" class="form-input" placeholder="1" style="padding:10px 8px;font-size:12px;text-align:center;"><input type="number" class="form-input" placeholder="0" style="padding:10px 8px;font-size:12px;text-align:right;" oninput="calcTotal()">';
+      div.innerHTML = '<input type="text" class="form-input" placeholder="Сэлбэгийн нэр" style="padding:10px 12px;font-size:12px;"><input type="number" class="form-input" placeholder="1" style="padding:10px 8px;font-size:12px;text-align:center;" oninput="calcTotal()"><input type="number" class="form-input" placeholder="0" style="padding:10px 8px;font-size:12px;text-align:right;" oninput="calcTotal()">';
       container.appendChild(div);
       showToast('Сэлбэг нэмэгдлээ');
     }
@@ -4852,7 +4838,14 @@
           <div class="feed-time">${f.time}</div>`;
         list.appendChild(item);
       });
-    } catch(e) { logError('renderFuelLog', e); } }
+    } catch(e) { logError('renderFuelLog', e); }
+      // Dashboard түлшний stat шинэчлэх
+      const today = new Date().toISOString().split('T')[0];
+      const todayFuels = fuelLog.filter(f => (f.created_at||'').startsWith(today) || (f.time||'').startsWith(today));
+      const todayTotal = todayFuels.reduce((s,f) => s+(parseFloat(f.liters)||0), 0);
+      const elFuel = document.getElementById('stat-fuel-today');
+      if (elFuel) elFuel.textContent = todayTotal >= 1000 ? (todayTotal/1000).toFixed(1)+'K' : Math.round(todayTotal).toString();
+    }
 
     // ============================================================
     // МАШИНЫ ДУГААРЫН АВТОКОМПЛИТ
@@ -5600,10 +5593,15 @@
       addNotif('blue', 'Түлш: ' + plateVal, amt + ' литр · үлдэгдэл: ' + fuelTank.total.toLocaleString() + 'L');
       if (liters) liters.value = '';
       if (note) note.value = '';
-      const priceEl = document.getElementById('fuel-price');
-      const odoEl   = document.getElementById('fuel-odometer');
-      if (priceEl) priceEl.value = '';
-      if (odoEl)   odoEl.value   = '';
+      // Машин, жолоочийн мэдээллийг цэвэрлэх
+      if (plate) plate.value = '';
+      if (driver) driver.value = '';
+      if (type) type.value = 'Дизель';
+      // QR уншигдсан мэдээллийг цэвэрлэх
+      const fuelPlateEl = document.getElementById('fuel-plate');
+      const fuelDriverEl = document.getElementById('fuel-driver');
+      if (fuelPlateEl) fuelPlateEl.value = '';
+      if (fuelDriverEl) fuelDriverEl.value = '';
       const warn = document.getElementById('fuel-warn');
       if (warn) warn.style.display = 'none';
     } catch(e) { logError('logFuel', e); } }
@@ -5661,7 +5659,19 @@
       ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
       // Checkbox-уудыг анхны байдалд оруулах
-      document.querySelectorAll('.checklist-item input[type=checkbox]').forEach(cb => { cb.checked = false; });
+      document.querySelectorAll('.checklist-item input[type=checkbox]').forEach(cb => {
+        cb.checked = false;
+        // Чеклист мөрний өнгийг анхдагч болгох
+        const item = cb.closest('.checklist-item');
+        if (item) item.style.color = '';
+      });
+
+      // Progress bar шинэчлэх
+      const total   = document.querySelectorAll('.checklist-item input[type=checkbox]').length;
+      const progBar = document.querySelector('.checklist-progress-bar, .progress-bar, [class*="progress"]');
+      const progTxt = document.querySelector('.checklist-score, [id*="checkScore"], [id*="progress-text"]');
+      if (progBar) { progBar.style.width = '0%'; progBar.style.background = 'var(--red)'; }
+      if (progTxt) progTxt.textContent = '0/' + total + ' · 0%';
 
       // Urgency анхдагч байдалд
       currentUrgency = 'normal';
@@ -5670,7 +5680,7 @@
       if (normalBtn) normalBtn.classList.add('active');
 
       // Зургуудыг цэвэрлэх
-      document.querySelectorAll('.photo-slot').forEach(slot => {
+      document.querySelectorAll('#screen-mechanic .photo-slot').forEach(slot => {
         slot.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 5v14M5 12h14" stroke-linecap="round"/></svg>`;
         slot.dataset.url = '';
       });
