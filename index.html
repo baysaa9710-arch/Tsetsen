@@ -5508,17 +5508,14 @@
 
     // Preview update
     document.addEventListener('input', e => {
-      if (['af-amount','af-capacity','af-price'].includes(e.target.id)) {
+      if (['af-amount','af-capacity'].includes(e.target.id)) {
         const amt  = parseFloat(document.getElementById('af-amount')?.value) || 0;
-        const cap  = parseFloat(document.getElementById('af-capacity')?.value) || fuelTank.capacity;
-        const price= parseFloat(document.getElementById('af-price')?.value) || 0;
+        const cap  = parseFloat(document.getElementById('af-capacity')?.value) || fuelTank?.capacity || 0;
         const prev = document.getElementById('af-preview');
         if (prev && amt > 0) {
           prev.style.display = 'block';
-          const newTotal = Math.min(fuelTank.total + amt, cap);
-          prev.innerHTML = `
-            Нэмсний дараа үлдэгдэл: <b style="color:var(--amber);font-family:'IBM Plex Mono',monospace;">${newTotal.toLocaleString()} L</b><br>
-            ${price > 0 ? `Нийт зардал: <b style="color:var(--green);font-family:'IBM Plex Mono',monospace;">${(amt*price).toLocaleString()} ₮</b>` : ''}`;
+          const newTotal = Math.min((fuelTank?.total||0) + amt, cap);
+          prev.innerHTML = `Нэмсний дараа үлдэгдэл: <b style="color:var(--amber);font-family:'IBM Plex Mono',monospace;">${newTotal.toLocaleString()} L</b>`;
         } else if (prev) prev.style.display = 'none';
       }
     });
@@ -5527,7 +5524,6 @@
       if (!fuelTank) { showToast('⚠️ Түлшний мэдээлэл ачаалагдаагүй байна'); return; }
       const amt      = parseFloat(document.getElementById('af-amount')?.value) || 0;
       const cap      = parseFloat(document.getElementById('af-capacity')?.value) || fuelTank.capacity;
-      const price    = parseFloat(document.getElementById('af-price')?.value) || 0;
       const supplier = document.getElementById('af-supplier')?.value.trim() || '';
       const note     = document.getElementById('af-note')?.value.trim() || '';
       if (amt <= 0) { showToast('⚠️ Литрийн хэмжээ оруулна уу'); return; }
@@ -5536,7 +5532,7 @@
       fuelTank.capacity = cap;
       const now2 = new Date();
       fuelTank.addLog.unshift({
-        amount: amt, supplier, price, note,
+        amount: amt, supplier, note,
         date: now2.toLocaleDateString('mn-MN'),
         time: String(now2.getHours()).padStart(2,'0') + ':' + String(now2.getMinutes()).padStart(2,'0'),
         operator: currentUsername || '—'
