@@ -6185,7 +6185,7 @@
         if (dbUsers && dbUsers.length > 0) {
           allUsers = dbUsers.map(u => ({
             id: u.id, username: u.username, password: u.password,
-            role: u.role, fullname: u.fullname, mustChange: u.must_change,
+            role: u.role, fullname: u.fullname, mustChange: false,
             companyId: u.company_id
           }));
           nextUserId = allUsers.reduce((m,u)=>Math.max(m,parseInt((u.id||'').replace(/\D/g,''))||0),0)+1;
@@ -6275,7 +6275,7 @@
           allUsers = dbUsers.map(u => ({
             id: u.id, username: u.username, password: u.password,
             role: u.role, fullname: u.fullname,
-            mustChange: u.must_change, companyId: u.company_id
+            mustChange: false, companyId: u.company_id
           }));
           saveUsers(allUsers);
         }
