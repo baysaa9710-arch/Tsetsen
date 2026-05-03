@@ -6128,12 +6128,12 @@
     // Default users — нууц үг sha256 хэш хийгдсэн
     // Жишээ: '1234' → sha256 → '03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4'
     const DEFAULT_USERS_PLAIN = [
-      { id:'u1', username:'admin',     password:'03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4', role:'admin',    mustChange:true, fullname:'Админ' },
-      { id:'u2', username:'mechanic1', password:'0ffe1abd1a08215353c233d6e009613e95eec4253832a761af28ff37ac5a150c', role:'mechanic', mustChange:true, fullname:'Механик 1' },
-      { id:'u3', username:'repair1',   password:'edee29f882543b956620b26d0ee0e7e950399b1c4222f5de05e06425b4c995e9', role:'repair',   mustChange:true, fullname:'Засварч 1' },
-      { id:'u4', username:'fuel1',     password:'318aee3fed8c9d040d35a7fc1fa776fb31303833aa2de885354ddf3d44d8fb69', role:'fuel',     mustChange:true, fullname:'Түгээгч 1' },
-      { id:'u5', username:'gps1',      password:'79f06f8fde333461739f220090a23cb2a79f6d714bee100d0e4b4af249294619', role:'gps',      mustChange:true, fullname:'GPS 1' },
-      { id:'u6', username:'driver1',   password:'c1f330d0aff31c1c87403f1e4347bcc21aff7c179908723535f2b31723702525', role:'driver',   mustChange:true, fullname:'Жолооч 1' },
+      { id:'u1', username:'admin',     password:'03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4', role:'admin',    mustChange:false, fullname:'Админ' },
+      { id:'u2', username:'mechanic1', password:'0ffe1abd1a08215353c233d6e009613e95eec4253832a761af28ff37ac5a150c', role:'mechanic', mustChange:false, fullname:'Механик 1' },
+      { id:'u3', username:'repair1',   password:'edee29f882543b956620b26d0ee0e7e950399b1c4222f5de05e06425b4c995e9', role:'repair',   mustChange:false, fullname:'Засварч 1' },
+      { id:'u4', username:'fuel1',     password:'318aee3fed8c9d040d35a7fc1fa776fb31303833aa2de885354ddf3d44d8fb69', role:'fuel',     mustChange:false, fullname:'Түгээгч 1' },
+      { id:'u5', username:'gps1',      password:'79f06f8fde333461739f220090a23cb2a79f6d714bee100d0e4b4af249294619', role:'gps',      mustChange:false, fullname:'GPS 1' },
+      { id:'u6', username:'driver1',   password:'c1f330d0aff31c1c87403f1e4347bcc21aff7c179908723535f2b31723702525', role:'driver',   mustChange:false, fullname:'Жолооч 1' },
     ];
     // Анхны нэвтрэх нууц үгс: admin=1234, mechanic1=1111, repair1=2222, fuel1=3333, gps1=4444, driver1=5555
 
@@ -7784,14 +7784,14 @@
       if (!password||password.length<4) { errEl.textContent='⚠️ Нууц үг дор хаяж 4 тэмдэгт'; errEl.style.display='block'; return; }
       if (allUsers.find(u=>u.username===username)) { errEl.textContent='⚠️ Энэ нэвтрэх нэр аль хэдийн бүртгэлтэй'; errEl.style.display='block'; return; }
 
-      const newUser  = { id:'u'+nextUserId++, username, password: await sha256(password), role, fullname, mustChange:true, companyId: currentCompanyId };
+      const newUser  = { id:'u'+nextUserId++, username, password: await sha256(password), role, fullname, mustChange:false, companyId: currentCompanyId };
       allUsers.push(newUser);
       saveUsers(allUsers);
       const pwHash = newUser.password;
       // Supabase-д хадгалах (DB_MT — company_id автоматаар нэмэгдэнэ)
       if (isOnline) {
         const res = await DB_MT.insert('users', {
-          id: newUser.id, username, password: pwHash, role, fullname, must_change: true
+          id: newUser.id, username, password: pwHash, role, fullname, must_change: false
         });
         if (!res) {
           pendingSync.push({ table:'users', data:{ id:newUser.id, username, password: pwHash, role, fullname, must_change:true, company_id: currentCompanyId } });
