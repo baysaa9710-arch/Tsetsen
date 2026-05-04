@@ -2508,11 +2508,13 @@
           </div>
           <div class="form-group">
             <label class="form-label">Байдлын үнэлгээ</label>
-            <select class="form-input">
-              <option>Хэвийн — засвар шаардлагагүй</option>
-              <option>Анхааруулга — ажиглах шаардлагатай</option>
-              <option>Засварт явуулах шаардлагатай</option>
-              <option>Яаралтай засвар — зогсоох</option>
+            <select class="form-input" id="mech-condition">
+              <option value="normal">Хэвийн — засвар шаардлагагүй</option>
+              <option value="warning">Анхааруулга — ажиглах шаардлагатай</option>
+              <option value="repair">Засварт явуулах шаардлагатай</option>
+              <option value="urgent">Яаралтай засвар — зогсоох</option>
+              <option value="no_driver">Жолооч байхгүй — сул зогсолт</option>
+              <option value="idle">Сул зогсолт — ажил байхгүй</option>
             </select>
           </div>
           <div class="form-group">
@@ -4318,15 +4320,27 @@
 
     function calcTotal() {
       let total = 0;
-      document.querySelectorAll('.parts-entry').forEach(row => {
+      const entries = document.querySelectorAll('#parts-container .parts-entry, .parts-entry');
+      entries.forEach(row => {
         const inputs = row.querySelectorAll('input[type=number]');
-        const qty   = parseFloat(inputs[0]?.value) || 0;
+        const qty   = parseFloat(inputs[0]?.value) || 1; // хоосон бол 1 гэж тооцно
         const price = parseFloat(inputs[1]?.value) || 0;
-        total += qty * price;
+        if (price > 0) total += qty * price;
       });
       const el = document.getElementById('total-cost');
-      if (el) el.textContent = total.toLocaleString() + ' ₮';
+      if (el) el.textContent = total > 0 ? total.toLocaleString() + ' ₮' : '0 ₮';
     }
+
+    // Хүснэгтийн аль ч input өөрчлөгдөхөд calcTotal дуудах
+    document.addEventListener('input', function(e) {
+      if (e.target.closest && e.target.closest('#parts-container')) calcTotal();
+    });
+    document.addEventListener('change', function(e) {
+      if (e.target.closest && e.target.closest('#parts-container')) calcTotal();
+    });
+    document.addEventListener('keyup', function(e) {
+      if (e.target.closest && e.target.closest('#parts-container')) calcTotal();
+    });
 
     // Week chart
     const weekData = [
@@ -4343,60 +4357,97 @@
       });
     }
 
-    // Month chart
-    const monthData = [
-      { d: '1', v: 24, r: 3 }, { d: '5', v: 18, r: 5 }, { d: '9', v: 22, r: 2 }, { d: '13', v: 28, r: 4 }, { d: '17', v: 20, r: 6 }, { d: '21', v: 25, r: 3 }, { d: '25', v: 23, r: 2 }
-    ];
-    const mc = document.getElementById('monthChart');
-    if (mc) {
-      const maxM = Math.max(...monthData.map(d => d.v));
-      monthData.forEach(d => {
-        const w = document.createElement('div');
-        w.className = 'bar-wrap';
-        w.innerHTML = '<div class="bar-val">' + d.v + '</div><div class="bar" style="height:' + (d.v / maxM * 90) + 'px;"></div><div class="bar" style="height:' + (d.r / maxM * 90) + 'px;background:linear-gradient(0deg,#991b1b,#ef4444);border-radius:6px 6px 0 0;"></div><div class="bar-lbl">' + d.d + '</div>';
-        wc && (wc.innerHTML = '');
-        wc ? null : null;
-        mc.appendChild(w);
-      });
-    }
-    // Rebuild week chart properly
-    if (wc) {
-      wc.innerHTML = '';
-      const maxW2 = Math.max(...weekData.map(x => x.v));
-      weekData.forEach(d => {
-        const w = document.createElement('div');
-        w.className = 'bar-wrap';
-        const h1 = Math.round(d.v / maxW2 * 100);
-        const h2 = Math.round(d.r / maxW2 * 100);
-        w.innerHTML = '<div class="bar" style="height:' + h1 + 'px;"></div><div class="bar" style="height:' + h2 + 'px;background:linear-gradient(0deg,#991b1b,#ef4444);border-radius:6px 6px 0 0;"></div><div class="bar-lbl">' + d.d + '</div>';
-        wc.appendChild(w);
-      });
+    async function renderMonthChart() {
+      const mc = document.getElementById('monthChart');
+      if (!mc) return;
+      mc.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px;">⏳ Ачаалж байна...</div>';
+      try {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = now.getMonth() + 1;
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const pad = n => String(n).padStart(2,'0');
+        const monthStr = `${year}-${pad(month)}`;
+
+        const chartData = [];
+        const step = Math.floor(daysInMonth / 7) || 4;
+        for (let start = 1; start <= daysInMonth; start += step) {
+          const end = Math.min(start + step - 1, daysInMonth);
+          let v = 0, r = 0, done = 0;
+          if (isOnline) {
+            try {
+              const ins = await DB_MT.get('inspections', `?date=gte.${monthStr}-${pad(start)}&date=lte.${monthStr}-${pad(end)}&select=id`);
+              const rep = await DB_MT.get('repair_tasks', `?created_at=gte.${monthStr}-${pad(start)}T00:00:00&created_at=lte.${monthStr}-${pad(end)}T23:59:59&select=id,status`);
+              v = ins ? ins.length : 0;
+              if (rep) { r = rep.filter(x=>x.status!=='done').length; done = rep.filter(x=>x.status==='done').length; }
+            } catch(e2) { logError('monthChart fetch', e2); }
+          }
+          chartData.push({ d: String(start), v, r, done });
+        }
+
+        mc.innerHTML = '';
+        const maxM = Math.max(...chartData.map(d => d.v + d.r + d.done), 1);
+        chartData.forEach(d => {
+          const w = document.createElement('div');
+          w.className = 'bar-wrap';
+          const hv = Math.round(d.v / maxM * 90);
+          const hr = Math.round(d.r / maxM * 90);
+          const hd = Math.round(d.done / maxM * 90);
+          w.innerHTML =
+            (d.v > 0 ? `<div class="bar-val">${d.v}</div>` : '') +
+            `<div class="bar" style="height:${hv}px;"></div>` +
+            (d.r > 0 ? `<div class="bar" style="height:${hr}px;background:linear-gradient(0deg,#991b1b,#ef4444);border-radius:6px 6px 0 0;"></div>` : '') +
+            (d.done > 0 ? `<div class="bar" style="height:${hd}px;background:linear-gradient(0deg,#166534,#22c55e);border-radius:6px 6px 0 0;"></div>` : '') +
+            `<div class="bar-lbl">${d.d}</div>`;
+          mc.appendChild(w);
+        });
+
+        // Хэрэв бүгд 0 бол хоосон мэдэгдэл харуулах
+        const allZero = chartData.every(d => d.v === 0 && d.r === 0 && d.done === 0);
+        if (allZero) {
+          mc.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim);font-size:12px;">Энэ сард бүртгэл байхгүй</div>';
+        }
+
+        // Month label шинэчлэх
+        const chartLabel = document.querySelector('#screen-charts .tag');
+        if (chartLabel) chartLabel.textContent = year + ' — ' + month + '-Р САР';
+      } catch(e) { logError('renderMonthChart', e); mc.innerHTML = '<div style="padding:20px;text-align:center;color:var(--red);font-size:12px;">⚠️ Алдаа гарлаа</div>'; }
     }
 
-    // Cost chart
-    const costData = [
-      { d: '10-р', v: 3200000 }, { d: '11-р', v: 4100000 }, { d: '12-р', v: 2800000 }, { d: '1-р', v: 5600000 }, { d: '2-р', v: 3900000 }, { d: '3-р', v: 7200000 }, { d: '4-р', v: 8400000 }
-    ];
-    const cc = document.getElementById('costChart');
-    if (cc) {
-      const maxC = Math.max(...costData.map(x => x.v));
-      costData.forEach(d => {
-        const w = document.createElement('div');
-        w.className = 'bar-wrap';
-        const h = Math.round(d.v / maxC * 110);
-        w.innerHTML = '<div class="bar blue-bar" style="height:' + h + 'px;"></div><div class="bar-lbl">' + d.d + '</div>';
-        cc.appendChild(w);
-      });
+    // Cost chart — сүүлийн 7 сарын засварын зардал
+    async function renderCostChart() {
+      const cc = document.getElementById('costChart');
+      if (!cc) return;
+      cc.innerHTML = '';
+      try {
+        const costData = [];
+        for (let i = 6; i >= 0; i--) {
+          const d = new Date();
+          d.setMonth(d.getMonth() - i);
+          const y = d.getFullYear();
+          const m = d.getMonth() + 1;
+          const pad = n => String(n).padStart(2,'0');
+          const start = `${y}-${pad(m)}-01`;
+          const lastDay = new Date(y, m, 0).getDate();
+          const end = `${y}-${pad(m)}-${pad(lastDay)}`;
+          let total = 0;
+          if (isOnline) {
+            const reps = await DB_MT.get('repair_tasks', `?created_at=gte.${start}T00:00:00&created_at=lte.${end}T23:59:59&select=total_cost`);
+            if (reps) total = reps.reduce((s,r) => s+(parseInt(r.total_cost)||0), 0);
+          }
+          costData.push({ d: m + '-р', v: total });
+        }
+        const maxC = Math.max(...costData.map(x => x.v), 1);
+        costData.forEach(d => {
+          const w = document.createElement('div');
+          w.className = 'bar-wrap';
+          const h = Math.round(d.v / maxC * 110);
+          w.innerHTML = '<div class="bar blue-bar" style="height:' + h + 'px;"></div><div class="bar-lbl">' + d.d + '</div>';
+          cc.appendChild(w);
+        });
+      } catch(e) { logError('renderCostChart', e); }
     }
 
-    // Fuel ranking bars
-    const fuelData = [
-      { plate: 'МН 7721 ВГ', total: 6240, max: 6240 },
-      { plate: 'МН 2293 АА', total: 5810, max: 6240 },
-      { plate: 'МН 5839 АА', total: 5420, max: 6240 },
-      { plate: 'МН 4412 АБ', total: 4980, max: 6240 },
-      { plate: 'МН 1124 ВА', total: 4210, max: 6240 },
-    ];
     // Fuel ranking болон fuel bars — renderFuelLog дуусахад шинэчлэгдэнэ
     function renderFuelRanking() {
       const fr = document.getElementById('fuel-ranking');
@@ -5040,7 +5091,7 @@
       const container = document.getElementById('parts-container');
       if (container) container.innerHTML = `<div class="parts-entry" style="display:grid;grid-template-columns:1fr 60px 90px;gap:8px;align-items:center;margin-bottom:8px;">
         <input type="text" class="form-input" placeholder="Сэлбэгийн нэр" style="padding:10px 12px;font-size:12px;">
-        <input type="number" class="form-input" placeholder="1" style="padding:10px 8px;font-size:12px;text-align:center;">
+        <input type="number" class="form-input" placeholder="1" style="padding:10px 8px;font-size:12px;text-align:center;" oninput="calcTotal()">
         <input type="number" class="form-input" placeholder="0" style="padding:10px 8px;font-size:12px;text-align:right;" oninput="calcTotal()">
       </div>`;
       if (document.getElementById('total-cost')) document.getElementById('total-cost').textContent = '0 ₮';
@@ -5495,8 +5546,9 @@
     function openAddFuelModal() {
       document.getElementById('af-supplier').value = '';
       document.getElementById('af-amount').value   = '';
-      document.getElementById('af-capacity').value = fuelTank.capacity || '';
-      document.getElementById('af-price').value    = '';
+      document.getElementById('af-capacity').value = fuelTank?.capacity || '';
+      const afPrice = document.getElementById('af-price');
+      if (afPrice) afPrice.value = '';
       document.getElementById('af-note').value     = '';
       document.getElementById('af-preview').style.display = 'none';
       document.getElementById('addFuelModal').style.display = 'flex';
@@ -5684,20 +5736,30 @@
       const ids = ['mech-plate','mech-driver','mech-odometer','mech-notes','mech-date'];
       ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
-      // Checkbox-уудыг анхны байдалд оруулах
-      document.querySelectorAll('.checklist-item input[type=checkbox]').forEach(cb => {
-        cb.checked = false;
-        // Чеклист мөрний өнгийг анхдагч болгох
-        const item = cb.closest('.checklist-item');
-        if (item) item.style.color = '';
-      });
+      // Wear checklist-уудыг анхны байдалд оруулах
+      document.querySelectorAll('.wear-check').forEach(el => el.classList.remove('checked'));
+      // Wear state-уудыг reset
+      if (typeof wearState !== 'undefined') { for (const k in wearState) wearState[k] = null; }
+      if (typeof trailerWearChecks !== 'undefined') { trailerWearChecks.forEach((_, i) => { trailerWearChecks[i] = null; }); }
+      // Baydaliin unelgee reset
+      const condEl = document.getElementById('mech-condition');
+      if (condEl) condEl.value = 'normal';
 
-      // Progress bar шинэчлэх
-      const total   = document.querySelectorAll('.checklist-item input[type=checkbox]').length;
-      const progBar = document.querySelector('.checklist-progress-bar, .progress-bar, [class*="progress"]');
-      const progTxt = document.querySelector('.checklist-score, [id*="checkScore"], [id*="progress-text"]');
-      if (progBar) { progBar.style.width = '0%'; progBar.style.background = 'var(--red)'; }
-      if (progTxt) progTxt.textContent = '0/' + total + ' · 0%';
+      // Progress bar шинэчлэх — эд ангийн шалгалт
+      const wearProg = document.getElementById('wear-progress');
+      const wearCount = document.getElementById('wear-count');
+      const wearPct = document.getElementById('wear-pct');
+      if (wearProg) { wearProg.style.width = '0%'; wearProg.style.background = 'var(--amber)'; }
+      if (wearCount) wearCount.textContent = '0/10';
+      if (wearPct) wearPct.textContent = '0%';
+
+      // Чиргүүлийн progress
+      const trailProg = document.getElementById('trailer-wear-progress');
+      const trailCount = document.getElementById('trailer-wear-count');
+      const trailPct = document.getElementById('trailer-wear-pct');
+      if (trailProg) { trailProg.style.width = '0%'; trailProg.style.background = 'var(--amber)'; }
+      if (trailCount) trailCount.textContent = '0/6';
+      if (trailPct) trailPct.textContent = '0%';
 
       // Urgency анхдагч байдалд
       currentUrgency = 'normal';
@@ -7830,11 +7892,11 @@
           id: newUser.id, username, password: pwHash, role, fullname, must_change: false
         });
         if (!res) {
-          pendingSync.push({ table:'users', data:{ id:newUser.id, username, password: pwHash, role, fullname, must_change:true, company_id: currentCompanyId } });
+          pendingSync.push({ table:'users', data:{ id:newUser.id, username, password: pwHash, role, fullname, must_change:false, company_id: currentCompanyId } });
           savePending();
         }
       } else {
-        pendingSync.push({ table:'users', data:{ id:newUser.id, username, password: pwHash, role, fullname, must_change:true, company_id: currentCompanyId } });
+        pendingSync.push({ table:'users', data:{ id:newUser.id, username, password: pwHash, role, fullname, must_change:false, company_id: currentCompanyId } });
         savePending();
       }
       // LocalStorage cache шинэчлэх
@@ -7896,10 +7958,10 @@
       if (!user) return;
       const hashed    = await sha256(np);
       user.password   = hashed;
-      user.mustChange = true;
+      user.mustChange = false;
       saveUsers(allUsers);
       if (isOnline) {
-        DB_MT.update('users', { password: hashed, must_change: true }, `?id=eq.${user.id}`);
+        DB_MT.update('users', { password: hashed, must_change: false }, `?id=eq.${user.id}`);
       }
       logAudit('RESET_PW', `Admin ${currentUsername} — ${user.fullname||user.username} нууц үгийг шинэчиллээ`);
       closeResetPwModal();
@@ -8838,7 +8900,7 @@
         if (!active) return;
         const id = active.id;
         if (id === 'screen-vehicles') renderVehicleList();
-        if (id === 'screen-repair'  ) renderRepairTasks();
+        if (id === 'screen-repair'  ) { renderRepairTasks(); setTimeout(calcTotal, 100); }
         if (id === 'screen-fuel'    ) { renderFuelLog(); updateTankUI(); }
         if (id === 'screen-mechanic') {
           renderRepairTasks();
@@ -8851,7 +8913,7 @@
           renderVehicleList();
           updateDashboardStats();
         }
-        if (id === 'screen-charts') { renderFuelRanking(); }
+        if (id === 'screen-charts') { renderFuelRanking(); renderMonthChart(); renderCostChart(); }
       }, 15000);
     }
 
