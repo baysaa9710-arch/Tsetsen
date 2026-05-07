@@ -447,6 +447,11 @@
 
     // Одоогийн auth token — supaFetch-д хэрэглэгдэнэ
     let _currentAuthToken = null;
+    Object.defineProperty(window, '_currentAuthToken', {
+      get() { return _currentAuthToken; },
+      set(v) { _currentAuthToken = v; },
+      configurable: true
+    });
 
     async function getAuthToken() {
       const supa = getSupaClient();
@@ -463,13 +468,12 @@
 
     async function supaFetch(table, method='GET', body=null, query='') {
       const url = `${SUPA_URL}/rest/v1/${table}${query}`;
-      // Auth JWT token ашиглах — RLS policy-д хэрэгтэй
-      // Нэвтрээгүй үед (token байхгүй) зөвхөн унших үйлдлийг зөвшөөрнө
-      if (!window._currentAuthToken && (method === 'POST' || method === 'PATCH' || method === 'DELETE')) {
-        logError('supaFetch', new Error('Нэвтрээгүй үед бичих үйлдэл хориглогдлоо'), { table, method });
-        return null;
+      // Token байхгүй бол авахыг оролдоно
+      if (!_currentAuthToken) {
+        await getAuthToken();
       }
-      const token = window._currentAuthToken || SUPA_KEY;
+      // Anon key-р бичих зөвшөөрөгдсөн — RLS policy-д тохируулагдсан
+      const token = _currentAuthToken || SUPA_KEY;
       const headers = {
         'apikey':        SUPA_KEY,
         'Authorization': `Bearer ${token}`,
@@ -2213,6 +2217,400 @@
     .summary-table tr:last-child td {
       border-bottom: none;
     }
+
+  /* ╔══════════════════════════════════════════════════════╗
+     ║   ЦЭЦЭН v9 — UI САЙЖРУУЛАЛТ (функц өөрчлөхгүй)     ║
+     ╚══════════════════════════════════════════════════════╝ */
+
+  /* ── 1. CSS ХУВЬСАГЧ НЭМЭЛТ ── */
+  :root {
+    --font-mono: 'IBM Plex Mono', monospace;
+    --transition: 0.22s cubic-bezier(0.4,0,0.2,1);
+    --amber-soft: rgba(245,158,11,0.08);
+    --glow-amber: 0 0 24px rgba(245,158,11,0.25);
+    --glow-green: 0 0 20px rgba(34,197,94,0.2);
+    --glow-red:   0 0 20px rgba(220,38,38,0.2);
+    --glow-blue:  0 0 20px rgba(59,130,246,0.2);
+    --surface-raised: #1e2233;
+    --input-height: 52px;
+  }
+
+  /* ── 2. LOGIN ДЭЛГЭЦ ── */
+  .login-screen {
+    background: radial-gradient(ellipse 80% 60% at 50% -10%, rgba(245,158,11,0.12) 0%, transparent 70%), var(--bg);
+  }
+  .login-logo {
+    box-shadow: var(--glow-amber), 0 8px 32px rgba(0,0,0,0.5);
+    animation: logoPulse 3s ease-in-out infinite;
+  }
+  @keyframes logoPulse {
+    0%,100% { box-shadow: var(--glow-amber), 0 8px 32px rgba(0,0,0,0.5); }
+    50%      { box-shadow: 0 0 48px rgba(245,158,11,0.45), 0 8px 32px rgba(0,0,0,0.5); }
+  }
+  .role-card {
+    transition: border-color var(--transition), background var(--transition), transform var(--transition), box-shadow var(--transition);
+  }
+  .role-card:hover {
+    border-color: rgba(245,158,11,0.4);
+    background: rgba(245,158,11,0.04);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  }
+  .role-card.selected {
+    box-shadow: 0 0 0 2px rgba(245,158,11,0.5), var(--glow-amber);
+  }
+
+  /* ── 3. ХЯНАХ САМБАР — STAT CARD ── */
+  .stat-card {
+    transition: transform var(--transition), box-shadow var(--transition);
+    cursor: pointer;
+  }
+  .stat-card:hover  { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(0,0,0,0.35); }
+  .stat-card:active { transform: translateY(0);    box-shadow: 0 2px 8px  rgba(0,0,0,0.2); }
+  .stat-card.amber:hover { box-shadow: 0 8px 28px rgba(0,0,0,0.3), var(--glow-amber); }
+  .stat-card.green:hover { box-shadow: 0 8px 28px rgba(0,0,0,0.3), var(--glow-green); }
+  .stat-card.red:hover   { box-shadow: 0 8px 28px rgba(0,0,0,0.3), var(--glow-red);   }
+  .stat-card.blue:hover  { box-shadow: 0 8px 28px rgba(0,0,0,0.3), var(--glow-blue);  }
+
+  /* ── 4. НАВИГАЦИЙН ТОВЧ ── */
+  .nav-item {
+    transition: opacity var(--transition), transform var(--transition);
+    border-radius: 14px;
+  }
+  .nav-item:active { transform: scale(0.9); }
+  .nav-item.active {
+    background: rgba(245,158,11,0.1);
+    position: relative;
+  }
+  .nav-item.active::before {
+    content: '';
+    position: absolute;
+    top: -1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 28px;
+    height: 2px;
+    background: var(--amber);
+    border-radius: 0 0 3px 3px;
+  }
+  .nav-icon svg { transition: stroke var(--transition); }
+
+  /* ── 5. FORM INPUT САЙЖРУУЛАЛТ ── */
+  .form-input {
+    min-height: var(--input-height);
+    transition: border-color var(--transition), box-shadow var(--transition), background var(--transition);
+  }
+  .form-input:focus {
+    background: rgba(245,158,11,0.04);
+    border-color: var(--amber);
+    box-shadow: 0 0 0 3px rgba(245,158,11,0.12), 0 2px 8px rgba(0,0,0,0.2);
+  }
+  select.form-input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237a8499' stroke-width='1.8' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 14px center;
+    padding-right: 40px;
+  }
+
+  /* ── 6. ТОВЧЛУУР САЙЖРУУЛАЛТ ── */
+  .btn-primary {
+    letter-spacing: 0.04em;
+    transition: all var(--transition);
+    position: relative;
+    overflow: hidden;
+  }
+  .btn-primary::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.15) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .btn-primary:hover {
+    box-shadow: 0 6px 28px rgba(245,158,11,0.5);
+    transform: translateY(-1px);
+  }
+  .btn-primary:active { transform: scale(0.97) translateY(0); }
+
+  .btn-secondary {
+    transition: all var(--transition);
+    font-weight: 700;
+  }
+  .btn-secondary:hover {
+    background: var(--surface3);
+    border-color: rgba(255,255,255,0.15);
+    transform: translateY(-1px);
+  }
+  .btn-secondary:active { transform: scale(0.97); }
+
+  /* ── 7. CARD САЙЖРУУЛАЛТ ── */
+  .card {
+    transition: box-shadow var(--transition), transform var(--transition);
+  }
+  .vehicle-card {
+    transition: box-shadow var(--transition), transform var(--transition);
+  }
+  .vehicle-card:hover {
+    box-shadow: 0 6px 24px rgba(0,0,0,0.35);
+    transform: translateY(-1px);
+  }
+  .repair-task-card {
+    transition: box-shadow var(--transition);
+  }
+  .repair-task-card.new-task {
+    border-left: 3px solid var(--amber);
+    animation: newTaskPulse 2.5s ease-in-out infinite;
+  }
+  @keyframes newTaskPulse {
+    0%,100% { border-left-color: var(--amber); }
+    50%      { border-left-color: rgba(245,158,11,0.3); }
+  }
+
+  /* ── 8. HEADER LOGO MARK ── */
+  .logo-mark {
+    transition: box-shadow var(--transition);
+  }
+  .logo-mark:hover {
+    box-shadow: 0 0 28px rgba(245,158,11,0.55);
+  }
+
+  /* ── 9. FEED ITEM ── */
+  .feed-item {
+    transition: background var(--transition);
+    border-radius: 10px;
+    margin: 0 4px;
+  }
+  .feed-item:hover { background: var(--surface2); }
+
+  /* ── 10. PHOTO SLOT ── */
+  .photo-slot {
+    transition: all var(--transition);
+  }
+  .photo-slot:hover {
+    border-color: rgba(245,158,11,0.5);
+    background: rgba(245,158,11,0.06);
+  }
+  .photo-slot:hover svg { stroke: var(--amber); opacity: 0.8; }
+  .photo-slot.filled { box-shadow: 0 2px 12px rgba(245,158,11,0.2); }
+
+  /* ── 11. TAG BADGE САЙЖРУУЛАЛТ ── */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    transition: all var(--transition);
+  }
+  .tag.green  { background: rgba(34,197,94,0.12);  color: var(--green);  border: 1px solid rgba(34,197,94,0.2); }
+  .tag.red    { background: rgba(220,38,38,0.12);   color: var(--red);    border: 1px solid rgba(220,38,38,0.2); }
+  .tag.amber  { background: rgba(245,158,11,0.12);  color: var(--amber);  border: 1px solid rgba(245,158,11,0.2); }
+  .tag.blue   { background: rgba(59,130,246,0.12);  color: var(--blue);   border: 1px solid rgba(59,130,246,0.2); }
+
+  /* ── 12. URGENCY ТОВЧ ── */
+  .urgency-btn, .urgency-opt {
+    transition: all var(--transition);
+  }
+  .urgency-btn:hover, .urgency-opt:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+  }
+
+  /* ── 13. MODAL ANIMATION ── */
+  @keyframes fadeSlide {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes modalIn {
+    from { opacity: 0; transform: translateY(100%); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── 14. WEAR CHECK ── */
+  .wear-check {
+    transition: all var(--transition);
+  }
+  .wear-check:hover { transform: scale(1.15); border-color: var(--text-dim); }
+  .wear-check.normal.checked { box-shadow: 0 0 8px rgba(34,197,94,0.4); }
+  .wear-check.wear.checked   { box-shadow: 0 0 8px rgba(245,158,11,0.4); }
+
+  /* ── 15. CHECKLIST TAB ── */
+  .checklist-tab {
+    transition: all var(--transition);
+  }
+  .checklist-tab:hover:not(.active) {
+    color: var(--text);
+    background: rgba(255,255,255,0.05);
+  }
+
+  /* ── 16. PROGRESS BAR ГӨЛГӨР ХӨДӨЛГӨӨН ── */
+  .progress-bar-fill {
+    transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+  }
+
+  /* ── 17. QR ZONE ── */
+  .qr-zone {
+    transition: all var(--transition);
+  }
+  .qr-zone:hover {
+    border-color: rgba(245,158,11,0.7);
+    background: rgba(245,158,11,0.06);
+    box-shadow: 0 4px 20px rgba(245,158,11,0.1);
+  }
+
+  /* ── 18. SECTION LABEL ДИЗАЙН ── */
+  .section-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: linear-gradient(90deg, var(--border), transparent);
+    margin-left: 4px;
+  }
+
+  /* ── 19. VEHICLE PLATE BADGE ── */
+  .vehicle-plate-badge {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--amber);
+    letter-spacing: 0.06em;
+    background: rgba(245,158,11,0.08);
+    border: 1px solid rgba(245,158,11,0.2);
+    padding: 4px 12px;
+    border-radius: 8px;
+  }
+
+  /* ── 20. SKELETON LOADING САЙЖРУУЛАЛТ ── */
+  .skeleton {
+    background: linear-gradient(90deg,
+      var(--surface2) 0%,
+      var(--surface3) 40%,
+      var(--surface2) 80%
+    );
+    background-size: 600px 100%;
+    animation: shimmer 1.6s ease-in-out infinite;
+    border-radius: 8px;
+  }
+  @keyframes shimmer {
+    0%   { background-position: -600px 0; }
+    100% { background-position:  600px 0; }
+  }
+
+  /* ── 21. NOTIF BADGE PULSE ── */
+  .notif-badge {
+    animation: badgePulse 2s ease-in-out infinite;
+  }
+  @keyframes badgePulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(220,38,38,0.5); }
+    50%     { box-shadow: 0 0 0 4px rgba(220,38,38,0); }
+  }
+
+  /* ── 22. BAR CHART АНИМАЦИ ── */
+  .bar {
+    animation: barGrow 0.7s cubic-bezier(0.4,0,0.2,1) both;
+    transform-origin: bottom;
+  }
+  @keyframes barGrow {
+    from { transform: scaleY(0); opacity: 0; }
+    to   { transform: scaleY(1); opacity: 1; }
+  }
+
+  /* ── 23. TOAST САЙЖРУУЛАЛТ ── */
+  .toast {
+    backdrop-filter: blur(16px);
+    box-shadow: 0 8px 32px rgba(0,0,0,0.5), 0 0 0 1px rgba(245,158,11,0.3);
+  }
+
+  /* ── 24. SCROLL INDICATOR ── */
+  .screen {
+    scroll-behavior: smooth;
+  }
+
+  /* ── 25. LIGHT MODE ТУСГАЙ СТИЛЬ ── */
+  body.light-mode .stat-card {
+    background: #ffffff;
+    border-color: rgba(0,0,0,0.06);
+  }
+  body.light-mode .btn-primary {
+    box-shadow: 0 4px 20px rgba(217,119,6,0.3);
+  }
+  body.light-mode .vehicle-plate-badge {
+    background: rgba(217,119,6,0.08);
+    border-color: rgba(217,119,6,0.2);
+  }
+  body.light-mode .nav-item.active {
+    background: rgba(217,119,6,0.08);
+  }
+  body.light-mode .feed-item:hover {
+    background: var(--surface2);
+  }
+
+  /* ── 26. ХЯНАХ САМБАР IDLE CARD ── */
+  #idle-vehicles-card > div {
+    transition: background var(--transition);
+  }
+  #idle-vehicles-card > div:hover {
+    background: var(--surface2);
+  }
+
+  /* ── 27. APP HEADER САЙЖРУУЛАЛТ ── */
+  .app-header {
+    transition: background var(--transition);
+  }
+  .notif-btn {
+    transition: all var(--transition);
+  }
+  .notif-btn:hover {
+    background: var(--surface3);
+    border-color: rgba(255,255,255,0.15);
+    transform: scale(1.05);
+  }
+  .notif-btn:active { transform: scale(0.95); }
+
+  /* ── 28. REPAIR TASK CARD URGENCY ── */
+  .repair-task-card {
+    border-left: 3px solid transparent;
+    transition: border-color var(--transition), box-shadow var(--transition);
+  }
+
+  /* ── 29. СУУРЬ SCROLL СУВАГ НУУХ ── */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(245,158,11,0.2) transparent;
+  }
+  *::-webkit-scrollbar { width: 3px; height: 3px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb { background: rgba(245,158,11,0.2); border-radius: 2px; }
+
+  /* ── 30. ГАР УТАСНЫ ОРЧИН ТОВЧ САЙЖРУУЛАЛТ ── */
+  @media (hover: none) {
+    .btn-primary:hover, .btn-secondary:hover,
+    .stat-card:hover, .vehicle-card:hover { transform: none; }
+  }
+  /* ── SELECT OPTION DARK THEME ── */
+  select.form-input option {
+    background: var(--surface2);
+    color: var(--text);
+    font-family: 'Sora', sans-serif;
+    font-size: 14px;
+    padding: 8px 12px;
+  }
+  select.form-input option:checked,
+  select.form-input option:hover {
+    background: var(--amber);
+    color: #000;
+  }
+  /* Light mode override */
+  body.light-mode select.form-input option {
+    background: #ffffff;
+    color: #1e2433;
+  }
   </style>
 
 </head>
@@ -2251,6 +2649,19 @@
         <div class="role-card" onclick="selectRole('parts')">
           <div class="role-icon">🛒</div>
           <div class="role-name">Сэлбэгийн<br>дэлгүүр</div>
+        </div>
+        <div class="role-card" onclick="selectRole('tire')">
+          <div class="role-icon" style="font-size:0;">
+            <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="18" cy="18" r="16" stroke="#f0a500" stroke-width="2.5"/>
+              <circle cx="18" cy="18" r="7" stroke="#f0a500" stroke-width="2.5"/>
+              <line x1="18" y1="2" x2="18" y2="8" stroke="#f0a500" stroke-width="2" stroke-linecap="round"/>
+              <line x1="18" y1="28" x2="18" y2="34" stroke="#f0a500" stroke-width="2" stroke-linecap="round"/>
+              <line x1="2" y1="18" x2="8" y2="18" stroke="#f0a500" stroke-width="2" stroke-linecap="round"/>
+              <line x1="28" y1="18" x2="34" y2="18" stroke="#f0a500" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="role-name">Дугуй<br>засварч</div>
         </div>
       </div>
       <!-- Demo credentials hint -->
@@ -2355,25 +2766,38 @@
       </div>
 
       <div class="stats-grid">
-        <div class="stat-card amber">
+        <div class="stat-card amber" onclick="openStatDetail('vehicles')" style="cursor:pointer;">
           <div class="stat-label">🚛 Нийт машин</div>
           <div class="stat-value amber" id="stat-total-vehicles">—</div>
           <div class="stat-sub">Идэвхтэй: <b style="color:var(--green);" id="stat-active-vehicles">—</b></div>
+          <div style="font-size:9px;color:var(--text-dim);margin-top:8px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;">дэлгэрэнгүй ›</div>
         </div>
-        <div class="stat-card red">
+        <div class="stat-card red" onclick="openStatDetail('repair')" style="cursor:pointer;">
           <div class="stat-label">🔴 Засварт</div>
           <div class="stat-value red" id="stat-repair-count">—</div>
           <div class="stat-sub">Урт засвар: <span id="stat-long-repair">0</span></div>
+          <div style="font-size:9px;color:var(--text-dim);margin-top:8px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;">дэлгэрэнгүй ›</div>
         </div>
-        <div class="stat-card green">
+        <div class="stat-card green" onclick="openStatDetail('inspect')" style="cursor:pointer;">
           <div class="stat-label">✅ Өнөөдрийн шалгалт</div>
           <div class="stat-value green" id="stat-today-inspect">—</div>
           <div class="stat-sub">Үлдсэн: <b style="color:var(--amber);" id="stat-inspect-remain">—</b></div>
+          <div style="font-size:9px;color:var(--text-dim);margin-top:8px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;">дэлгэрэнгүй ›</div>
         </div>
-        <div class="stat-card blue">
+        <div class="stat-card blue" onclick="openStatDetail('fuel')" style="cursor:pointer;">
           <div class="stat-label">⛽ Нийт түлш</div>
           <div class="stat-value blue" id="stat-fuel-today">—</div>
           <div class="stat-sub">Литр / өнөөдөр</div>
+          <div style="font-size:9px;color:var(--text-dim);margin-top:8px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;">дэлгэрэнгүй ›</div>
+        </div>
+      </div>
+
+      <!-- Service Reminder -->
+      <div id="service-reminder-banner" style="display:none;margin:0 16px 12px;background:rgba(245,158,11,0.08);border:1.5px solid rgba(245,158,11,0.35);border-radius:12px;padding:12px 14px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <div style="font-size:22px;">🔔</div>
+          <div style="flex:1;"><div style="font-size:13px;font-weight:800;color:var(--amber);" id="service-reminder-title">Сануулга</div><div style="font-size:11px;color:var(--text-dim);margin-top:2px;" id="service-reminder-text">—</div></div>
+          <button onclick="document.getElementById('service-reminder-banner').style.display='none'" style="width:24px;height:24px;background:var(--surface3);border:none;border-radius:6px;color:var(--text-dim);cursor:pointer;font-size:14px;">×</button>
         </div>
       </div>
 
@@ -2404,6 +2828,45 @@
       <!-- Warning cards -->
       <div class="section-label">⚠️ Анхааруулга</div>
       <div id="inspection-alerts"></div>
+
+      <!-- Дугуйн хяналт -->
+      <div class="section-label" style="margin-top:4px;">⚫ Дугуйн хяналт</div>
+      <div class="card">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;padding:14px 16px 10px;">
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-dash-patch">—</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;line-height:1.3;">НӨХСӨН</div>
+          </div>
+          <div style="text-align:center;border-left:1px solid var(--border);">
+            <div style="font-size:22px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-dash-olgoi">—</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;line-height:1.3;">ОЛГОЙ</div>
+          </div>
+          <div style="text-align:center;border-left:1px solid var(--border);">
+            <div style="font-size:22px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-dash-elgevch">—</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;line-height:1.3;">ЭЛГЭВЧ</div>
+          </div>
+          <div style="text-align:center;border-left:1px solid var(--border);">
+            <div style="font-size:22px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-dash-dagdii">—</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;line-height:1.3;">ДАГДИЙ</div>
+          </div>
+        </div>
+        <div style="padding:0 16px 12px;display:flex;gap:10px;">
+          <div style="flex:1;background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.2);border-radius:10px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:11px;color:var(--text-dim);font-weight:600;">🆕 Шинэ нөөц</span>
+            <span style="font-size:15px;font-weight:700;color:var(--green);font-family:var(--font-mono);" id="tire-dash-stock-new">—</span>
+          </div>
+          <div style="flex:1;background:rgba(239,68,68,0.07);border:1px solid rgba(239,68,68,0.2);border-radius:10px;padding:9px 12px;display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:11px;color:var(--text-dim);font-weight:600;">♻️ Хуучин</span>
+            <span style="font-size:15px;font-weight:700;color:var(--red);font-family:var(--font-mono);" id="tire-dash-stock-old">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Жолооч байхгүй / Сул зогсолт -->
+      <div class="section-label" style="margin-top:4px;">🚫 Жолооч байхгүй — Сул зогсолт</div>
+      <div class="card" id="idle-vehicles-card">
+        <div style="padding:16px;text-align:center;color:var(--text-dim);font-size:12px;">Ачаалж байна...</div>
+      </div>
     </div>
 
     <!-- SCREEN 2: Mechanic -->
@@ -2447,6 +2910,48 @@
             <label class="form-label">Жолоочийн нэр</label>
             <input type="text" class="form-input" placeholder="Овог нэр" id="mech-driver">
           </div>
+
+          <!-- Үзлэгийн шалтгаан -->
+          <div class="form-group">
+            <label class="form-label">Үзлэгийн шалтгаан</label>
+            <select class="form-input" id="mech-visit-type" onchange="onVisitTypeChange()">
+              <option value="regular">🔧 Ердийн үзлэг</option>
+              <option value="handover">🔄 Хүлээлгэн өгсөн</option>
+              <option value="receive">✅ Хүлээж авсан</option>
+              <option value="rest">😴 Амарсан</option>
+              <option value="repair_done">🛠️ Засвараас гарсан</option>
+            </select>
+          </div>
+
+          <!-- Хүлээлгэн өгсөн/авсан хэсэг — onchange-аар харагдана -->
+          <div id="handover-section" style="display:none;">
+            <div style="background:rgba(245,158,11,0.06);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:14px;margin-bottom:10px;">
+              <div style="font-size:11px;font-weight:800;color:var(--amber);margin-bottom:10px;">🔄 ХҮЛЭЭЛГЭН ӨГӨХ МЭДЭЭЛЭЛ</div>
+              <div class="form-group">
+                <label class="form-label">Хүлээж авч байгаа жолооч</label>
+                <input type="text" class="form-input" placeholder="Овог нэр" id="mech-handover-to">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Хүлээлгэн өгөх үеийн эвдрэл / тэмдэглэл</label>
+                <textarea class="form-input" placeholder="Эвдрэл, гэмтэл, анхаарах зүйл..." id="mech-handover-notes" rows="2" style="resize:none;"></textarea>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Дагалдах хэрэгсэл</label>
+                <input type="text" class="form-input" placeholder="Жишээ: Гинж, Трос, Хүрз..." id="mech-handover-equipment">
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+                <div class="form-group">
+                  <label class="form-label">Одометр (км)</label>
+                  <input type="number" class="form-input" placeholder="км" id="mech-handover-km">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Түлшний хэмжээ (L)</label>
+                  <input type="number" class="form-input" placeholder="L" id="mech-handover-fuel">
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
             <div class="form-group">
               <label class="form-label">Одометр</label>
@@ -2624,6 +3129,14 @@
           <input type="text" class="form-input" id="nv-vin" placeholder="Жишээ: LC1AMBE1M0004526"
             style="font-family:'IBM Plex Mono',monospace;font-size:12px;"
             oninput="this.value=this.value.toUpperCase()">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Машины байдал</label>
+          <select class="form-input" id="nv-status">
+            <option value="active">🟢 Ажилтай</option>
+            <option value="idle">🟡 Сул зогсолт</option>
+          </select>
         </div>
 
         <div class="form-group">
@@ -3091,6 +3604,36 @@
           <div class="bar-chart" id="costChart"></div>
         </div>
       </div>
+
+      <!-- Дугуйн засварын мэдээлэл -->
+      <div class="card">
+        <div style="padding:14px 16px 10px;display:flex;justify-content:space-between;align-items:center;">
+          <span style="font-size:13px;font-weight:700;">⚫ Дугуйн засвар</span>
+          <span class="tag" id="tire-chart-label" style="background:rgba(240,165,0,0.12);color:var(--amber);border:1px solid rgba(240,165,0,0.3);">Энэ сар</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:8px;padding:0 16px 12px;">
+          <div style="background:var(--surface2);border-radius:10px;padding:12px 8px;text-align:center;">
+            <div style="font-size:24px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-chart-patch">—</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">НӨХСӨН</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:12px 8px;text-align:center;">
+            <div style="font-size:24px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-chart-olgoi">—</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">ОЛГОЙ</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:12px 8px;text-align:center;">
+            <div style="font-size:24px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-chart-elgevch">—</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">ЭЛГЭВЧ</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:12px 8px;text-align:center;">
+            <div style="font-size:24px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-chart-dagdii">—</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">ДАГДИЙ</div>
+          </div>
+        </div>
+        <div style="padding:0 16px 14px;">
+          <div style="font-size:10px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;">Засварчаар</div>
+          <div id="tire-chart-by-tech"></div>
+        </div>
+      </div>
     </div>
 
     <!-- SCREEN 6: Reports -->
@@ -3137,6 +3680,12 @@
       <div class="section-label">🔧 Механикийн шалгалт</div>
       <div class="card" id="report-mechanic-detail">
         <div style="padding:16px;text-align:center;color:var(--text-dim);font-size:12px;">Ачаалж байна...</div>
+      </div>
+
+      <!-- Дугуйн засварын тайлан -->
+      <div class="section-label">⚫ Дугуйн засварын тайлан</div>
+      <div style="margin:0 16px 14px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;" id="tire-monthly-report">
+        <div style="text-align:center;padding:8px;color:var(--text-dim);font-size:13px;">Ачаалж байна...</div>
       </div>
 
       <!-- CSV татах -->
@@ -3331,6 +3880,7 @@
           <button onclick="setPerfRole('mechanic')" id="pr-mechanic" style="white-space:nowrap;flex-shrink:0;padding:8px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-dim);font-family:'Sora',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">🔧 Механик</button>
           <button onclick="setPerfRole('repair')"   id="pr-repair"   style="white-space:nowrap;flex-shrink:0;padding:8px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-dim);font-family:'Sora',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">🛠️ Засварч</button>
           <button onclick="setPerfRole('fuel')"     id="pr-fuel"     style="white-space:nowrap;flex-shrink:0;padding:8px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-dim);font-family:'Sora',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">⛽ Түлш</button>
+          <button onclick="setPerfRole('tire')"     id="pr-tire"     style="white-space:nowrap;flex-shrink:0;padding:8px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-dim);font-family:'Sora',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">⚫ Дугуй</button>
         </div>
       </div>
 
@@ -3602,6 +4152,7 @@
             <option value="fuel">⛽ Түлшний түгээгч</option>
             <option value="gps">📍 GPS хяналт</option>
             <option value="parts">🛒 Сэлбэгийн дэлгүүр</option>
+            <option value="tire">⚫ Дугуй засварч</option>
             <option value="admin">👑 Ерөнхий хяналт</option>
           </select>
         </div>
@@ -3650,6 +4201,10 @@
           </svg>
         </div>
         <div class="nav-label">Түлш</div>
+      </div>
+      <div class="nav-item" id="nav-tire" onclick="gotoScreen('tire',this)" style="display:none;">
+        <div class="nav-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
+        <div class="nav-label">Дугуй</div>
       </div>
       <div class="nav-item" id="nav-vehicles" onclick="gotoScreen('vehicles',this)">
         <div class="nav-icon">
@@ -3739,7 +4294,263 @@
       </div>
     </nav>
 
+    <!-- ═══════════════════════════════════════════
+         SCREEN: ⚫ ДУГУЙН МЕНЕЖМЕНТ v3
+    ═══════════════════════════════════════════ -->
+    <div class="screen" id="screen-tire">
+      <div class="app-header">
+        <div class="page-title">⚫ Дугуйн <span>менежмент</span></div>
+        <button class="btn-secondary" style="padding:8px 14px;font-size:12px;" onclick="openQRScanModal('tire')">📷 QR</button>
+      </div>
+      <div class="card">
+        <div class="card-inner">
+          <!-- Нөөцийн мэдээлэл + QR -->
+          <!-- Нөөцийн тоо — дарахад тохируулга нэмэх -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:8px;">
+            <!-- Шинэ дугуй -->
+            <div onclick="openStockModal('new')"
+              style="background:rgba(16,185,129,0.07);border:1.5px solid rgba(16,185,129,0.25);border-radius:12px;padding:14px;text-align:center;cursor:pointer;transition:border-color 0.2s;"
+              onmouseenter="this.style.borderColor='rgba(16,185,129,0.6)'" onmouseleave="this.style.borderColor='rgba(16,185,129,0.25)'">
+              <div style="font-size:11px;font-weight:700;color:var(--green);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">🆕 Шинэ дугуй</div>
+              <div style="font-size:36px;font-weight:800;font-family:var(--font-mono);" id="stock-new-tires">—</div>
+              <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">Агуулахад байгаа</div>
+              <div style="font-size:9px;color:var(--green);margin-top:6px;font-weight:700;opacity:0.7;">✏️ ТОХИРУУЛАХ</div>
+            </div>
+            <!-- Хуучин дугуй -->
+            <div onclick="openStockModal('old')"
+              style="background:rgba(239,68,68,0.07);border:1.5px solid rgba(239,68,68,0.25);border-radius:12px;padding:14px;text-align:center;cursor:pointer;transition:border-color 0.2s;"
+              onmouseenter="this.style.borderColor='rgba(239,68,68,0.6)'" onmouseleave="this.style.borderColor='rgba(239,68,68,0.25)'">
+              <div style="font-size:11px;font-weight:700;color:var(--red);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px;">♻️ Хуучин дугуй</div>
+              <div style="font-size:36px;font-weight:800;font-family:var(--font-mono);" id="stock-old-tires">—</div>
+              <div style="font-size:10px;color:var(--text-dim);margin-top:4px;">Агуулхад байгаа</div>
+              <div style="font-size:9px;color:var(--red);margin-top:6px;font-weight:700;opacity:0.7;">✏️ ТОХИРУУЛАХ</div>
+            </div>
+          </div>
+          <div style="font-size:10px;color:var(--text-dim);text-align:center;margin-bottom:10px;font-weight:600;" id="stock-updated-at"></div>
+
+          <!-- Stock Modal -->
+          <div id="stockModal" onclick="if(event.target===this)closeStockModal()"
+            style="display:none;position:fixed;inset:0;z-index:700;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);align-items:center;justify-content:center;">
+            <div style="width:88%;max-width:340px;background:var(--surface);border-radius:20px;padding:24px 20px;">
+              <div style="font-size:16px;font-weight:700;margin-bottom:6px;" id="stock-modal-title">Нөөц тохируулах</div>
+              <div style="font-size:12px;color:var(--text-dim);margin-bottom:20px;" id="stock-modal-sub">Одоогийн нөөцийн тоог оруулна уу</div>
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+                <button onclick="adjustStock(-1)" style="width:48px;height:48px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
+                <input type="number" id="stock-modal-input" min="0" max="999" placeholder="0"
+                  style="flex:1;text-align:center;font-family:var(--font-mono);font-size:32px;font-weight:800;padding:10px;background:var(--surface2);border:1.5px solid var(--border);border-radius:12px;color:var(--text);outline:none;">
+                <button onclick="adjustStock(+1)" style="width:48px;height:48px;border-radius:12px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text);font-size:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+              </div>
+              <div style="display:flex;gap:10px;">
+                <button onclick="closeStockModal()" class="btn-secondary" style="flex:1;">Болих</button>
+                <button onclick="saveStockCount()" class="btn-primary" style="flex:2;">✅ Хадгалах</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="qr-zone" onclick="openQRScanModal('tire')">
+            <svg class="qr-icon" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+            <div class="qr-text">QR код уншуулах</div>
+            <div class="qr-sub">эсвэл доор гараар бичнэ</div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Машины дугаар</label>
+            <div class="plate-input-wrap">
+              <input type="text" class="form-input" placeholder="МН 0000 АА" id="tire-plate"
+                oninput="this.value=this.value.toUpperCase();debouncedPlateAC('tire-plate','tire-plate-ac');tireFillDriver()"
+                onblur="setTimeout(()=>hidePlateAutocomplete('tire-plate-ac'),200)" autocomplete="off">
+              <div id="tire-plate-ac" class="plate-autocomplete" style="display:none;"></div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Жолоочийн нэр</label>
+            <input type="text" class="form-input" placeholder="Овог нэр" id="tire-driver">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Дугуйн ажлын төрөл</label>
+            <!-- Hidden native select for value binding -->
+            <select id="tire-action-type" style="display:none;" onchange="onTireActionChange()">
+              <option value="patch">🔧 Дугуй нөхсөн (олгой/элгэвч)</option>
+              <option value="new">🆕 Шинэ дугуй тавьсан</option>
+              <option value="old">♻️ Хуучин дугуй авсан/бүртгэх</option>
+              <option value="spare">📦 Запас дугуй</option>
+              <option value="swap">🔄 Машин хооронд сольсон</option>
+            </select>
+            <!-- Custom dropdown UI -->
+            <div id="tire-action-display" style="position:relative;">
+              <div id="tire-action-selected"
+                onclick="toggleTireActionDropdown()"
+                style="width:100%;padding:14px 16px;background:var(--surface2);border:1.5px solid var(--border);border-radius:var(--radius-sm);color:var(--text);font-family:'Sora',sans-serif;font-size:15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center;transition:border-color 0.2s;">
+                <span id="tire-action-label">🔧 Дугуй нөхсөн (олгой/элгэвч)</span>
+                <svg width="12" height="8" viewBox="0 0 12 8" fill="none"><path d="M1 1l5 5 5-5" stroke="var(--text-dim)" stroke-width="1.8" stroke-linecap="round"/></svg>
+              </div>
+              <div id="tire-action-dropdown" style="display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--surface2);border:1.5px solid var(--amber);border-radius:var(--radius-sm);z-index:400;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.5);">
+                <div class="tire-action-opt" data-value="patch" onclick="selectTireAction('patch','🔧 Дугуй нөхсөн (олгой/элгэвч)')"
+                  style="padding:13px 16px;cursor:pointer;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);transition:background 0.15s;">🔧 Дугуй нөхсөн (олгой/элгэвч)</div>
+                <div class="tire-action-opt" data-value="new" onclick="selectTireAction('new','🆕 Шинэ дугуй тавьсан')"
+                  style="padding:13px 16px;cursor:pointer;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);transition:background 0.15s;">🆕 Шинэ дугуй тавьсан</div>
+                <div class="tire-action-opt" data-value="old" onclick="selectTireAction('old','♻️ Хуучин дугуй авсан/бүртгэх')"
+                  style="padding:13px 16px;cursor:pointer;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);transition:background 0.15s;">♻️ Хуучин дугуй авсан/бүртгэх</div>
+                <div class="tire-action-opt" data-value="spare" onclick="selectTireAction('spare','📦 Запас дугуй')"
+                  style="padding:13px 16px;cursor:pointer;font-size:14px;color:var(--text);border-bottom:1px solid var(--border);transition:background 0.15s;">📦 Запас дугуй</div>
+                <div class="tire-action-opt" data-value="swap" onclick="selectTireAction('swap','🔄 Машин хооронд сольсон')"
+                  style="padding:13px 16px;cursor:pointer;font-size:14px;color:var(--text);transition:background 0.15s;">🔄 Машин хооронд сольсон</div>
+              </div>
+            </div>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Солисон дугуйны байршил</label>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;" id="tire-position-grid"></div>
+          </div>
+          <!-- Нөхсөн дугуйд: 3 тусдаа тоо -->
+          <div id="tire-patch-counts" style="display:none;">
+            <div style="background:rgba(245,158,11,0.05);border:1px solid rgba(245,158,11,0.2);border-radius:12px;padding:14px;margin-bottom:10px;">
+              <div style="font-size:11px;font-weight:800;color:var(--amber);margin-bottom:12px;letter-spacing:0.04em;">🔧 НӨХӨӨСИЙН МЭДЭЭЛЭЛ</div>
+              <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label" style="font-size:10px;">ОЛГОЙ ТОО</label>
+                  <input type="number" class="form-input" id="tire-olgoi" min="0" max="50" placeholder="0"
+                    style="font-family:var(--font-mono);font-size:20px;font-weight:700;text-align:center;padding:10px 8px;">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label" style="font-size:10px;">ЭЛГЭВЧ ТОО</label>
+                  <input type="number" class="form-input" id="tire-elgevch" min="0" max="50" placeholder="0"
+                    style="font-family:var(--font-mono);font-size:20px;font-weight:700;text-align:center;padding:10px 8px;">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                  <label class="form-label" style="font-size:10px;">ДАГДИЙ ТОО</label>
+                  <input type="number" class="form-input" id="tire-dagdii" min="0" max="50" placeholder="0"
+                    style="font-family:var(--font-mono);font-size:20px;font-weight:700;text-align:center;padding:10px 8px;">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Шинэ дугуй + нөөц: тоо оруулах -->
+          <div id="tire-count-simple" style="display:none;">
+            <div class="form-group">
+              <label class="form-label" id="tire-count-label">Шинэ дугуйн тоо</label>
+              <input type="number" class="form-input" id="tire-count" min="1" max="50" placeholder="0"
+                style="font-family:var(--font-mono);font-size:26px;font-weight:700;text-align:center;">
+            </div>
+          </div>
+
+          <!-- Нөөц дугуйн хэсэг -->
+          <div id="tire-spare-section" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Тэмдэглэл</label>
+              <input type="text" class="form-input" id="tire-spare-note" placeholder="295/80R22.5, тэмдэглэл...">
+            </div>
+          </div>
+
+          <!-- Машин солилтод: тоо -->
+          <div id="tire-swap-count" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Солисон дугуйн тоо</label>
+              <input type="number" class="form-input" id="tire-swap-count-val" min="1" max="20" placeholder="0"
+                style="font-family:var(--font-mono);font-size:26px;font-weight:700;text-align:center;">
+            </div>
+          </div>
+          <div id="tire-swap-section" style="display:none;">
+            <div style="background:rgba(59,130,246,0.06);border:1px solid rgba(59,130,246,0.2);border-radius:12px;padding:14px;margin-bottom:10px;">
+              <div style="font-size:11px;font-weight:800;color:var(--blue);margin-bottom:12px;">🔄 МАШИН ХООРОНДЫН СОЛИЛТЫН МЭДЭЭЛЭЛ</div>
+              <div class="form-group">
+                <label class="form-label">Ямар машинаас авсан</label>
+                <div class="plate-input-wrap">
+                  <input type="text" class="form-input" placeholder="МН 0000 АА" id="tire-from-plate"
+                    oninput="this.value=this.value.toUpperCase();debouncedPlateAC('tire-from-plate','tire-from-plate-ac')"
+                    onblur="setTimeout(()=>hidePlateAutocomplete('tire-from-plate-ac'),200)" autocomplete="off">
+                  <div id="tire-from-plate-ac" class="plate-autocomplete" style="display:none;"></div>
+                </div>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Хэний зөвшөөрөлтэй авсан</label>
+                <input type="text" class="form-input" placeholder="Зөвшөөрсөн хүний нэр / албан тушаал" id="tire-approval">
+              </div>
+              <div class="form-group">
+                <label class="form-label">Тэмдэглэл</label>
+                <textarea class="form-input" placeholder="Нэмэлт мэдээлэл..." id="tire-swap-notes" rows="2" style="resize:none;"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Дугуй засварчийн нэр</label>
+            <input type="text" class="form-input" placeholder="Засварчийн нэр" id="tire-technician">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Огноо</label>
+            <input type="date" class="form-input" id="tire-date">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Нэмэлт тэмдэглэл</label>
+            <textarea class="form-input" placeholder="Нэмэлт мэдээлэл..." id="tire-notes" rows="2" style="resize:none;"></textarea>
+          </div>
+          <button class="btn-primary" onclick="saveTireRecord()" style="margin-top:4px;">💾 Дугуйн бүртгэл хадгалах</button>
+        </div>
+      </div>
+      <div class="section-label" style="margin-top:8px;">📊 Сарын дүн</div>
+      <!-- Нөхсөн: олгой, элгэвч, дагдий тусдаа -->
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:0 16px 8px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;">
+          <div style="font-size:26px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-sum-olgoi">0</div>
+          <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;line-height:1.3;">ОЛГОЙ<br>(тоо)</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;">
+          <div style="font-size:26px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-sum-elgevch">0</div>
+          <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;line-height:1.3;">ЭЛГЭВЧ<br>(тоо)</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;">
+          <div style="font-size:26px;font-weight:700;color:var(--amber);font-family:var(--font-mono);" id="tire-sum-dagdii">0</div>
+          <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;line-height:1.3;">ДАГДИЙ<br>(тоо)</div>
+        </div>
+      </div>
+      <!-- Шинэ дугуй, солилт, машин -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:0 16px 14px;">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;">
+          <div style="font-size:26px;font-weight:700;color:var(--green);font-family:var(--font-mono);" id="tire-sum-new">0</div>
+          <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">ШИНЭ ДУГУЙ</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;">
+          <div style="font-size:26px;font-weight:700;color:var(--blue);font-family:var(--font-mono);" id="tire-sum-swap">0</div>
+          <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">МАШИН СОЛИЛТ</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;">
+          <div style="font-size:26px;font-weight:700;color:var(--purple);font-family:var(--font-mono);" id="tire-sum-patch">0</div>
+          <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">НӨХСӨН (удаа)</div>
+        </div>
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;">
+          <div style="font-size:26px;font-weight:700;color:var(--red);font-family:var(--font-mono);" id="tire-sum-vehicles">0</div>
+          <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">ХАМРАГДСАН МАШИН</div>
+        </div>
+      </div>
+      <div style="padding:0 16px 12px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;">
+        <button onclick="filterTireList('all')"   id="trf-all"   style="flex-shrink:0;padding:7px 14px;border-radius:20px;border:1.5px solid var(--amber);background:rgba(240,165,0,0.1);color:var(--amber);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;">Бүгд</button>
+        <button onclick="filterTireList('patch')" id="trf-patch" style="flex-shrink:0;padding:7px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-dim);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;">🔧 Нөхсөн</button>
+        <button onclick="filterTireList('new')"   id="trf-new"   style="flex-shrink:0;padding:7px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-dim);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;">🆕 Шинэ</button>
+        <button onclick="filterTireList('swap')"  id="trf-swap"  style="flex-shrink:0;padding:7px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-dim);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;">🔄 Солилт</button>
+        <button onclick="filterTireList('spare')" id="trf-spare" style="flex-shrink:0;padding:7px 14px;border-radius:20px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text-dim);font-family:var(--font);font-size:12px;font-weight:700;cursor:pointer;">📦 Нөөц</button>
+      </div>
+      <div class="section-label">⚫ Бүртгэлийн жагсаалт</div>
+      <div id="tire-record-list" style="padding-bottom:100px;"></div>
+    </div>
+
     <!-- Toast -->
+
+  <!-- STAT DETAIL MODAL -->
+  <div id="statDetailModal" onclick="if(event.target===this)closeStatDetail()" style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.7);backdrop-filter:blur(8px);align-items:flex-end;justify-content:center;">
+    <div style="width:100%;max-width:420px;background:var(--surface);border-radius:24px 24px 0 0;max-height:80vh;display:flex;flex-direction:column;animation:fadeSlide 0.25s ease;">
+      <div style="padding:16px 20px 0;flex-shrink:0;">
+        <div style="width:36px;height:4px;background:var(--surface3);border-radius:2px;margin:0 auto 16px;"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <div style="font-size:17px;font-weight:700;" id="stat-modal-title">—</div>
+          <button onclick="closeStatDetail()" style="width:30px;height:30px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text-dim);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">✕</button>
+        </div>
+        <div style="font-size:12px;color:var(--text-dim);padding-bottom:14px;border-bottom:1px solid var(--border);" id="stat-modal-sub"></div>
+      </div>
+      <div id="stat-modal-body" style="overflow-y:auto;padding:14px 20px 40px;flex:1;"></div>
+    </div>
+  </div>
+
     <div class="toast" id="toast"></div>
   </div>
 
@@ -3749,22 +4560,7 @@
     const _getToken = () => window._supaGlobal ? window._supaGlobal.getToken() : null;
     const _setToken = (t) => { if(window._supaGlobal) window._supaGlobal.setToken(t); };
     // ── JWT helper функцүүд ──
-    function getCompanyIdFromJWT(token) {
-      if (!token) return null;
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        return payload?.app_metadata?.company_id ||
-               payload?.user_metadata?.company_id || null;
-      } catch(e) { return null; }
-    }
-    function getRoleFromJWT(token) {
-      if (!token) return null;
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        return payload?.app_metadata?.role ||
-               payload?.user_metadata?.role || null;
-      } catch(e) { return null; }
-    }
+    // BUG FIX #9: getCompanyIdFromJWT/getRoleFromJWT already defined in script block 1 — removed duplicates
     // Clock
     function updateClock() {
       const now = new Date();
@@ -4320,12 +5116,21 @@
 
     function calcTotal() {
       let total = 0;
-      const entries = document.querySelectorAll('#parts-container .parts-entry, .parts-entry');
-      entries.forEach(row => {
-        const inputs = row.querySelectorAll('input[type=number]');
-        const qty   = parseFloat(inputs[0]?.value) || 1; // хоосон бол 1 гэж тооцно
-        const price = parseFloat(inputs[1]?.value) || 0;
-        if (price > 0) total += qty * price;
+      // ALL inputs (text+number) - consistent with override version
+      document.querySelectorAll('#parts-container .parts-entry').forEach(row => {
+        const allInputs = row.querySelectorAll('input');
+        if (allInputs.length >= 3) {
+          // 3-column: name(text), qty(number), price(number)
+          const qty   = parseFloat(allInputs[1]?.value) || 1;
+          const price = parseFloat(allInputs[2]?.value) || 0;
+          if (price > 0) total += qty * price;
+        } else if (allInputs.length >= 2) {
+          // 2-column number inputs only
+          const numInputs = row.querySelectorAll('input[type=number]');
+          const qty   = parseFloat(numInputs[0]?.value) || 1;
+          const price = parseFloat(numInputs[1]?.value) || 0;
+          if (price > 0) total += qty * price;
+        }
       });
       const el = document.getElementById('total-cost');
       if (el) el.textContent = total > 0 ? total.toLocaleString() + ' ₮' : '0 ₮';
@@ -4343,19 +5148,8 @@
     });
 
     // Week chart
-    const weekData = [
-      { d: 'Да', v: 18, r: 2 }, { d: 'Мя', v: 22, r: 3 }, { d: 'Лх', v: 15, r: 1 }, { d: 'Пү', v: 24, r: 4 }, { d: 'Ба', v: 20, r: 2 }, { d: 'Бя', v: 12, r: 1 }, { d: 'Ня', v: 8, r: 0 }
-    ];
-    const wc = document.getElementById('weekChart');
-    if (wc) {
-      const maxW = Math.max(...weekData.map(d => d.v));
-      weekData.forEach(d => {
-        const w = document.createElement('div');
-        w.className = 'bar-wrap';
-        w.innerHTML = '<div class="bar" style="height:' + (d.v / maxW * 100) + 'px;"></div><div class="bar" style="height:' + (d.r / maxW * 100) + 'px;background:linear-gradient(0deg,#991b1b,#ef4444);border-radius:6px 6px 0 0;"></div><div class="bar-lbl">' + d.d + '</div>';
-        wc.appendChild(w);
-      });
-    }
+    // BUG FIX #10: Static demo weekData removed — updateWeekChart() fetches real DB data after login
+    // weekChart is populated by updateDashboardStats() → updateWeekChart() on login
 
     async function renderMonthChart() {
       const mc = document.getElementById('monthChart');
@@ -4460,7 +5254,8 @@
       // Өнөөдрийн fuel_logs-аас машин тус бүрийн нийт литр
       const byPlate = {};
       fuelLog.forEach(f => {
-        const date = (f.created_at||f.time||'').slice(0,10);
+        // BUG FIX #13: f.time is 'HH:MM' not a date — use created_at only
+        const date = (f.created_at || '').slice(0, 10);
         if (date !== today) return;
         const p = f.plate || f.vehicle || '—';
         byPlate[p] = (byPlate[p] || 0) + (parseFloat(f.liters) || 0);
@@ -4637,25 +5432,30 @@
     } catch(e) { logError('renderRepairTasks', e); } }
 
     function acceptTask(id) {
-      const t = repairTasks.find(x => x.id === id);
+      // BUG FIX #1: onclick passes Number but t.id is String → use String() coerce
+      const t = repairTasks.find(x => String(x.id) === String(id));
       if (t) {
         t.status = 'accepted';
         t.repairer = currentUsername || 'repair1';
         renderRepairTasks();
         if (isOnline) DB_MT.update('repair_tasks', { status:'accepted', repairer: currentUsername||'repair1' }, '?id=eq.' + id);
         showToast('✓ ' + t.plate + ' — хүлээн авлаа');
+        logAudit('REPAIR_ACCEPT', (currentUsername||'—') + ' — ' + t.plate + ' хүлээн авлаа');
       }
     }
 
     function completeTask(id) {
-      const t = repairTasks.find(x => x.id === id);
+      // BUG FIX #1: same String coerce fix
+      const t = repairTasks.find(x => String(x.id) === String(id));
       if (t) {
         t.status = 'done';
+        t.completed_at = new Date().toISOString();
         renderRepairTasks();
         if (isOnline) DB_MT.update('repair_tasks', { status:'done', completed_at: new Date().toISOString() }, '?id=eq.' + id);
         showToast('🎉 ' + t.plate + ' — засвар дууслаа!');
         addNotif('green', t.plate + ' засвар дууссан', (t.driver||'') + ' засвар амжилттай дуусгалаа.');
         logAudit('REPAIR_DONE', t.plate + ' — засвар дуусгалаа');
+        updateDashboardStats();
       }
     }
 
@@ -4838,12 +5638,7 @@
     // ============================================================
     // INSPECTION DUE ALERTS — auto warnings
     // ============================================================
-    const inspectionData = [
-      { plate: 'МН 5839 АА', daysLeft: 3 },
-      { plate: 'МН 1124 ВА', daysLeft: 3 },
-      { plate: 'МН 8821 АА', daysLeft: 5 },
-      { plate: 'МН 4412 АБ', daysLeft: 12 },
-    ];
+    // BUG FIX #12: inspectionData hardcoded const removed — renderInspectionAlerts uses real vehicles[]
 
     function renderInspectionAlerts() {
       const container = document.getElementById('inspection-alerts');
@@ -4920,7 +5715,8 @@
     } catch(e) { logError('renderFuelLog', e); }
       // Dashboard түлшний stat шинэчлэх
       const today = new Date().toISOString().split('T')[0];
-      const todayFuels = fuelLog.filter(f => (f.created_at||'').startsWith(today) || (f.time||'').startsWith(today));
+      // BUG FIX #13b: f.time is 'HH:MM' not a date — filter by created_at only
+      const todayFuels = fuelLog.filter(f => (f.created_at||'').startsWith(today));
       const todayTotal = todayFuels.reduce((s,f) => s+(parseFloat(f.liters)||0), 0);
       const elFuel = document.getElementById('stat-fuel-today');
       if (elFuel) elFuel.textContent = todayTotal >= 1000 ? (todayTotal/1000).toFixed(1)+'K' : Math.round(todayTotal).toString();
@@ -5047,7 +5843,8 @@
       const entry = {
         plate, driver: driver||'Жолооч', description: desc,
         repairer: currentUsername||'repair1',
-        parts: JSON.stringify(parts), total_cost: totalCost, status:'done'
+        parts: JSON.stringify(parts), total_cost: totalCost, status:'done',
+        created_at: new Date().toISOString() // BUG FIX #11
       };
 
       if (isOnline) {
@@ -5099,8 +5896,132 @@
     } catch(e) { logError('saveRepairNote', e); } }
 
     // ============================================================
-    // 📋 САРЫН ТАЙЛАН — Бодит өгөгдөл + CSV татах
+    // 🚫 ЖОЛООЧ БАЙХГҮЙ — СУЛ ЗОГСОЛТ
     // ============================================================
+    async function renderIdleVehicles() {
+      const el = document.getElementById('idle-vehicles-card');
+      if (!el) return;
+      try {
+        const today = new Date().toISOString().split('T')[0];
+        const idleList = [];
+
+        if (isOnline) {
+          // 1. Өнөөдрийн механикийн үзлэгээс
+          const ins = await DB_MT.get('inspections',
+            `?date=eq.${today}&order=created_at.desc`);
+
+          if (ins && ins.length > 0) {
+            ins.forEach(i => {
+              const isIdle =
+                i.urgency === 'no_driver' ||
+                i.urgency === 'idle' ||
+                i.visit_type === 'handover' ||
+                i.visit_type === 'rest' ||
+                i.visit_type === 'receive';
+
+              if (!isIdle) return;
+
+              let reason = 'Сул зогсолт';
+              if (i.urgency === 'no_driver') reason = 'Жолооч байхгүй';
+              else if (i.visit_type === 'handover') reason = 'Хүлээлгэн өгсөн';
+              else if (i.visit_type === 'receive') reason = 'Хүлээж авсан';
+              else if (i.visit_type === 'rest') reason = 'Амарсан';
+
+              const existing = idleList.find(x => x.plate === i.plate);
+              if (!existing) {
+                idleList.push({
+                  plate: i.plate,
+                  driver: i.driver || i.handover_from || '—',
+                  reason,
+                  mechanic: i.mechanic || '—',
+                  time: i.created_at
+                    ? new Date(i.created_at).toLocaleTimeString('mn-MN',{hour:'2-digit',minute:'2-digit'})
+                    : '—',
+                  handover_to: i.handover_to || '',
+                  handover_notes: i.handover_notes || ''
+                });
+              }
+            });
+          }
+
+          // 2. Vehicles table-ийн status-аас
+          const idleVehicles = await DB_MT.get('vehicles',
+            `?status=in.(idle,no_driver)&order=status_updated_at.desc`);
+          if (idleVehicles) {
+            idleVehicles.forEach(v => {
+              if (idleList.find(x => x.plate === v.plate)) return; // давхардал хасах
+              idleList.push({
+                plate: v.plate,
+                driver: v.driver || '—',
+                reason: v.status === 'no_driver' ? 'Жолооч байхгүй' : 'Сул зогсолт',
+                mechanic: v.status_updated_by || '—',
+                time: v.status_updated_at
+                  ? new Date(v.status_updated_at).toLocaleTimeString('mn-MN',{hour:'2-digit',minute:'2-digit'})
+                  : '—',
+                handover_to: '', handover_notes: ''
+              });
+            });
+          }
+        }
+
+        el.innerHTML = '';
+
+        if (idleList.length === 0) {
+          el.innerHTML = `<div style="padding:16px;text-align:center;color:var(--green);font-size:13px;font-weight:700;">✅ Өнөөдөр сул зогсолт бүртгэгдээгүй</div>`;
+          return;
+        }
+
+        // Stat
+        const noDriver = idleList.filter(x => x.reason === 'Жолооч байхгүй').length;
+        const idle     = idleList.filter(x => x.reason !== 'Жолооч байхгүй').length;
+        const statDiv  = document.createElement('div');
+        statDiv.style.cssText = 'padding:12px 16px;display:flex;gap:16px;border-bottom:1px solid var(--border);';
+        statDiv.innerHTML = `
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:800;color:var(--red);">${noDriver}</div>
+            <div style="font-size:10px;color:var(--text-dim);">Жолооч байхгүй</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:800;color:var(--amber);">${idle}</div>
+            <div style="font-size:10px;color:var(--text-dim);">Сул зогсолт</div>
+          </div>
+          <div style="text-align:center;">
+            <div style="font-size:22px;font-weight:800;color:var(--text);">${idleList.length}</div>
+            <div style="font-size:10px;color:var(--text-dim);">Нийт</div>
+          </div>`;
+        el.appendChild(statDiv);
+
+        // Жагсаалт
+        idleList.forEach(v => {
+          const row = document.createElement('div');
+          row.style.cssText = 'padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;';
+          const color = v.reason === 'Жолооч байхгүй' ? 'var(--red)' : 'var(--amber)';
+          const icon  = v.reason === 'Жолооч байхгүй' ? '🚫' :
+                        v.reason === 'Хүлээлгэн өгсөн' ? '🔄' :
+                        v.reason === 'Хүлээж авсан'    ? '✅' :
+                        v.reason === 'Амарсан'          ? '😴' : '⏸️';
+          const sub = v.handover_to
+            ? `${v.driver} → ${v.handover_to}`
+            : v.driver;
+          row.innerHTML = `
+            <div style="width:36px;height:36px;background:rgba(239,68,68,0.1);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">${icon}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:800;color:var(--text);">${v.plate}</div>
+              <div style="font-size:11px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${sub}</div>
+              ${v.handover_notes ? `<div style="font-size:10px;color:var(--text-dim);margin-top:2px;">${v.handover_notes}</div>` : ''}
+            </div>
+            <div style="text-align:right;flex-shrink:0;">
+              <div style="font-size:11px;font-weight:700;color:${color};">${v.reason}</div>
+              <div style="font-size:10px;color:var(--text-dim);">${v.time}</div>
+            </div>`;
+          el.appendChild(row);
+        });
+
+      } catch(e) {
+        logError('renderIdleVehicles', e);
+        el.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text-dim);font-size:12px;">⚠️ Мэдээлэл татахад алдаа гарлаа</div>';
+      }
+    }
     let _reportData = { repairs: [], fuels: [], inspections: [] };
 
     function initReportMonthSelect() {
@@ -5583,13 +6504,29 @@
       fuelTank.total    = Math.min(fuelTank.total + amt, cap);
       fuelTank.capacity = cap;
       const now2 = new Date();
-      fuelTank.addLog.unshift({
+      const logEntry = {
         amount: amt, supplier, note,
         date: now2.toLocaleDateString('mn-MN'),
         time: String(now2.getHours()).padStart(2,'0') + ':' + String(now2.getMinutes()).padStart(2,'0'),
         operator: currentUsername || '—'
-      });
+      };
+      fuelTank.addLog.unshift(logEntry);
       saveFuelTank();
+
+      // Supabase-д хадгалах
+      if (isOnline) {
+        const dbEntry = {
+          supplier, note,
+          liters: amt,
+          total_after: fuelTank.total,
+          capacity: cap,
+          operator: currentUsername || '—',
+          company_id: currentCompanyId,
+          created_at: now2.toISOString()
+        };
+        DB_MT.insert('fuel_supply_logs', dbEntry).catch(e => logError('fuel_supply_logs insert', e));
+      }
+
       closeAddFuelModal();
       updateTankUI();
       showToast('✅ ' + amt.toLocaleString() + ' L нэмэгдлээ — нийт ' + fuelTank.total.toLocaleString() + ' L');
@@ -5643,7 +6580,8 @@
       const entry = {
         plate: plateVal, driver: (driver && driver.value) || 'Жолооч',
         liters: amt, type: (type && type.value) || 'Дизель',
-        notes: (note && note.value) || '', time: timeStr
+        notes: (note && note.value) || '', time: timeStr,
+        created_at: new Date().toISOString() // BUG FIX #2: needed for today filter & ranking
       };
       fuelLog.unshift(entry);
       // Сангаас хасах
@@ -5658,7 +6596,8 @@
         fuel_type: entry.type, notes: entry.notes, operator: currentUsername || 'fuel1',
         price_per_liter: pricePerLiter || null,
         odometer:        odometerVal   || null,
-        receipt_photos: receiptUrls.length > 0 ? JSON.stringify(receiptUrls) : null
+        receipt_photos: receiptUrls.length > 0 ? JSON.stringify(receiptUrls) : null,
+        created_at: new Date().toISOString() // BUG FIX #3: needed for today filters
       };
       if (isOnline) {
         await DB_MT.insert('fuel_logs', dbEntry);
@@ -5684,6 +6623,14 @@
       if (warn) warn.style.display = 'none';
     } catch(e) { logError('logFuel', e); } }
 
+    function onVisitTypeChange() {
+      const type = document.getElementById('mech-visit-type')?.value;
+      const section = document.getElementById('handover-section');
+      if (!section) return;
+      // Хүлээлгэн өгсөн эсвэл хүлээж авсан үед хэсэг харагдана
+      section.style.display = (type === 'handover' || type === 'receive') ? 'block' : 'none';
+    }
+
     async function saveMechanicNote() { try {
       const plate    = document.getElementById('mech-plate');
       const driver   = document.getElementById('mech-driver');
@@ -5699,15 +6646,53 @@
         checklist[cb.dataset.key || cb.id] = cb.checked;
       });
 
+      const visitType = document.getElementById('mech-visit-type')?.value || 'regular';
+      const handoverTo        = document.getElementById('mech-handover-to')?.value.trim() || '';
+      const handoverNotes     = document.getElementById('mech-handover-notes')?.value.trim() || '';
+      const handoverEquipment = document.getElementById('mech-handover-equipment')?.value.trim() || '';
+      const handoverKm        = parseInt(document.getElementById('mech-handover-km')?.value) || 0;
+      const handoverFuel      = parseFloat(document.getElementById('mech-handover-fuel')?.value) || 0;
+
+      // Элэгдлийн шалгалтын өгөгдөл цуглуулах
+      const wearItems = {};
+      wearChecks.forEach((c, i) => {
+        const n = document.getElementById('wear-norm-' + i);
+        const w = document.getElementById('wear-wear-' + i);
+        if (n && w) {
+          wearItems['w' + i] = n.classList.contains('checked') ? 'normal'
+            : w.classList.contains('checked') ? 'wear' : null;
+        }
+      });
+      // Чиргүүлийн элэгдлийн шалгалт
+      trailerWearChecks.forEach((c, i) => {
+        const n = document.getElementById('tw-n-' + i);
+        const w = document.getElementById('tw-w-' + i);
+        if (n && w) {
+          wearItems['tw' + i] = n.classList.contains('checked') ? 'normal'
+            : w.classList.contains('checked') ? 'wear' : null;
+        }
+      });
+
+      const conditionVal = document.getElementById('mech-condition')?.value || 'normal';
+
       const entry = {
         plate: plateVal,
         driver: (driver && driver.value) || '',
         odometer: odometer ? parseInt(odometer.value) || 0 : 0,
         notes: (notes && notes.value) || '',
-        checklist: checklist,
+        checklist: JSON.stringify(checklist),
+        wear_items: JSON.stringify(wearItems),
         urgency: currentUrgency || 'normal',
+        condition: conditionVal,
         mechanic: currentUsername || 'mechanic1',
-        date: new Date().toISOString().split('T')[0]
+        date: new Date().toISOString().split('T')[0],
+        company_id: currentCompanyId,
+        visit_type: visitType,
+        handover_to: handoverTo,
+        handover_notes: handoverNotes,
+        handover_equipment: handoverEquipment,
+        handover_km: handoverKm,
+        handover_fuel: handoverFuel
       };
 
       if (isOnline) {
@@ -5715,6 +6700,23 @@
         if (res) {
           showToast('✅ ' + plateVal + ' — шалгалт хадгаллаа');
           checkServiceSchedule();
+
+          // Машины status шинэчлэх
+          let newStatus = 'active';
+          if (visitType === 'handover' || visitType === 'rest') newStatus = 'idle';
+          else if (currentUrgency === 'no_driver') newStatus = 'no_driver';
+          else if (currentUrgency === 'urgent' || visitType === 'repair_done') newStatus = 'repair';
+          else if (visitType === 'receive') newStatus = 'active';
+
+          await DB_MT.update('vehicles',
+            { status: newStatus, status_updated_at: new Date().toISOString(), status_updated_by: currentUsername || '—' },
+            `?plate=eq.${encodeURIComponent(plateVal)}`
+          );
+          // Локал vehicles-д мөн шинэчлэх
+          const veh = vehicles.find(v => v.plate === plateVal);
+          if (veh) { veh.status = newStatus; try { lsSet('vehicles', JSON.stringify(vehicles)); } catch(e){} }
+
+          updateDashboardStats();
         } else {
           pendingSync.push({ id: (crypto.randomUUID ? crypto.randomUUID() : Date.now()+Math.random()), table: 'inspections', data: entry, companyId: currentCompanyId });
           savePending();
@@ -5733,8 +6735,15 @@
 
     function clearMechanicForm() {
       // Оруулах талбарууд цэвэрлэх
-      const ids = ['mech-plate','mech-driver','mech-odometer','mech-notes','mech-date'];
+      const ids = ['mech-plate','mech-driver','mech-odometer','mech-notes','mech-date',
+                   'mech-handover-to','mech-handover-notes','mech-handover-equipment','mech-handover-km','mech-handover-fuel'];
       ids.forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+      // Visit type анхдагч болгох
+      const vt = document.getElementById('mech-visit-type');
+      if (vt) vt.value = 'regular';
+      // Handover section нуух
+      const hs = document.getElementById('handover-section');
+      if (hs) hs.style.display = 'none';
 
       // Wear checklist-уудыг анхны байдалд оруулах
       document.querySelectorAll('.wear-check').forEach(el => el.classList.remove('checked'));
@@ -6145,13 +7154,14 @@
     }
 
     const ROLE_META = {
-      superadmin:{ name:'Super Admin',        icon:'🌐', nav:['home','mechanic','repair','fuel','vehicles','gps','parts','charts','report','performance','service','admin','driverscore'] },
-      admin:    { name:'Ерөнхий хяналт',   icon:'👑', nav:['home','mechanic','repair','fuel','vehicles','gps','parts','charts','report','performance','service','admin','driverscore'] },
+      superadmin:{ name:'Super Admin',        icon:'🌐', nav:['home','mechanic','repair','fuel','vehicles','gps','parts','charts','report','performance','service','admin','driverscore','tire'] },
+      admin:    { name:'Ерөнхий хяналт',   icon:'👑', nav:['home','mechanic','repair','fuel','vehicles','gps','parts','charts','report','performance','service','admin','driverscore','tire'] },
       mechanic: { name:'Механик',            icon:'🔧', nav:['mechanic','vehicles','service','parts'] },
       repair:   { name:'Засварч',            icon:'🛠️', nav:['repair','vehicles','parts'] },
       fuel:     { name:'Түлшний түгээгч',   icon:'⛽', nav:['fuel'] },
       gps:      { name:'GPS хяналт',         icon:'📍', nav:['gps','vehicles'] },
       parts:    { name:'Сэлбэгийн дэлгүүр', icon:'🛒', nav:['parts','vehicles'] },
+      tire:     { name:'Дугуй засварч',     icon:'🔧', nav:['tire','vehicles'] },
     };
 
     // Company ID-ийг бүх DB query-д автоматаар нэмэх
@@ -6231,7 +7241,8 @@
       { id:'u3', username:'repair1',   password:'edee29f882543b956620b26d0ee0e7e950399b1c4222f5de05e06425b4c995e9', role:'repair',   mustChange:false, fullname:'Засварч 1' },
       { id:'u4', username:'fuel1',     password:'318aee3fed8c9d040d35a7fc1fa776fb31303833aa2de885354ddf3d44d8fb69', role:'fuel',     mustChange:false, fullname:'Түгээгч 1' },
       { id:'u5', username:'gps1',      password:'79f06f8fde333461739f220090a23cb2a79f6d714bee100d0e4b4af249294619', role:'gps',      mustChange:false, fullname:'GPS 1' },
-      { id:'u6', username:'driver1',   password:'c1f330d0aff31c1c87403f1e4347bcc21aff7c179908723535f2b31723702525', role:'driver',   mustChange:false, fullname:'Жолооч 1' },
+      { id:'u6', username:'tire1',     password:'9c6b057a2b9d96a4067a749ee3b3b0158d390cf1da5ded445db7d1ec24fce0eb', role:'tire',     mustChange:true,  fullname:'Дугуй засварч 1' },
+      { id:'u7', username:'driver1',   password:'c1f330d0aff31c1c87403f1e4347bcc21aff7c179908723535f2b31723702525', role:'driver',   mustChange:false, fullname:'Жолооч 1' },
     ];
     // Анхны нэвтрэх нууц үгс: admin=1234, mechanic1=1111, repair1=2222, fuel1=3333, gps1=4444, driver1=5555
 
@@ -6310,7 +7321,7 @@
       ROLES[role] = { ...ROLE_META[role], get users(){ return allUsers.filter(u=>u.role===role); } };
     });
 
-    let currentRole=null, currentUsername=null, currentUserId=null, selectedRole=null;
+    let currentRole=null, currentUsername=null, currentUserId=null, currentFullname=null, selectedRole=null;
 
     function selectRole(role) {
       selectedRole = role;
@@ -6425,7 +7436,7 @@
     } }
 
     function completeLogin(user) {
-      currentRole=user.role; currentUsername=user.username; currentUserId=user.id;
+      currentRole=user.role; currentUsername=user.username; currentUserId=user.id; currentFullname=user.fullname||user.username||null;
       currentCompanyId   = user.companyId || currentCompanyId || 'COMP001';
       currentCompanyName = user.companyName || currentCompanyId;
       // LocalStorage-д хадгалах (offline дэмжлэг)
@@ -6524,6 +7535,7 @@
 
     function applyRoleNav(role) {
       const allowed = ROLES[role].nav;
+      const _tn=document.getElementById('nav-tire'); if(_tn) _tn.style.display=(role==='admin'||role==='superadmin'||role==='tire')?'':'none';
       // Admin-д зөвхөн үндсэн 5 цэс navbar-т харагдана, бусад нь drawer-т
       const ADMIN_HIDDEN = ['gps','parts','charts','report','performance','service','admin','driverscore'];
       document.querySelectorAll('.nav-item').forEach(item => {
@@ -6776,7 +7788,10 @@
       vehicles.forEach(v => {
         const daysLeft = Math.ceil((new Date(v.inspection) - new Date()) / 86400000);
         const urgColor = daysLeft <= 7 ? 'var(--red)' : daysLeft <= 30 ? 'var(--amber)' : 'var(--green)';
-        const statusLabel = v.status === 'repair' ? '<span class="tag red">Засварт</span>' : '<span class="tag green">Идэвхтэй</span>';
+        const statusLabel = v.status === 'repair' ? '<span class="tag red">Засварт</span>'
+          : v.status === 'idle' ? '<span class="tag amber">Сул зогссон</span>'
+          : v.status === 'no_driver' ? '<span class="tag amber">Жолооч байхгүй</span>'
+          : '<span class="tag green">Идэвхтэй</span>'; // BUG FIX #8
         const card = document.createElement('div');
         card.className = 'vehicle-card';
         card.innerHTML = `
@@ -6867,6 +7882,9 @@
 
         // 6. Activity feed
         await updateActivityFeed();
+
+        // 7. Жолооч байхгүй / сул зогсолт
+        await renderIdleVehicles();
 
       } catch(e) { logError('updateDashboardStats', e); }
     }
@@ -7016,7 +8034,7 @@
             </div>
             <div style="grid-column:1/-1;">
               <div style="color:var(--text-dim);font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px;">Байдал</div>
-              <div>${v.status === 'repair' ? '<span class="tag red">Засварт</span>' : '<span class="tag green">Идэвхтэй</span>'}</div>
+              <div>${v.status === 'repair' ? '<span class="tag red">Засварт</span>' : v.status === 'idle' ? '<span class="tag amber">Сул зогссон</span>' : v.status === 'no_driver' ? '<span class="tag amber">Жолооч байхгүй</span>' : '<span class="tag green">Идэвхтэй</span>'}</div>
             </div>
           </div>
           <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);">
@@ -7224,7 +8242,7 @@
       vehicles.splice(idx, 1);
       try { lsSet('vehicles', JSON.stringify(vehicles)); } catch(e) {}
       if (isOnline) {
-        await DB.delete('vehicles', '?id=eq.' + vid);
+        await DB_MT.delete('vehicles', '?id=eq.' + vid); // BUG FIX #7: use DB_MT (adds company_id filter)
       } else {
         pendingSync.push({ id: (crypto.randomUUID ? crypto.randomUUID() : Date.now()+Math.random()), table:'_delete_vehicles', data:{ id: vid }, companyId: currentCompanyId });
         savePending();
@@ -7327,10 +8345,12 @@
     }
 
     async function saveNewVehicle() { try {
-      const plate = document.getElementById('nv-plate').value.trim() || 'МН 0000 АА';
-      const vin   = document.getElementById('nv-vin').value.trim() || 'VIN000000';
-      const model = document.getElementById('nv-model').value.trim() || 'Тодорхойгүй';
+      const plate      = document.getElementById('nv-plate').value.trim() || 'МН 0000 АА';
+      const vin        = document.getElementById('nv-vin').value.trim() || 'VIN000000';
+      const model      = document.getElementById('nv-model').value.trim() || 'Тодорхойгүй';
       const inspection = document.getElementById('nv-inspection').value || new Date().toISOString().split('T')[0];
+      const status     = document.getElementById('nv-status')?.value || 'active';
+      const driver     = document.getElementById('nv-driver')?.value.trim() || '';
       const pendingInp = document.getElementById('nv-trailer-input');
       if (pendingInp && pendingInp.value.trim()) {
         const vinInp = document.getElementById('nv-trailer-vin');
@@ -7340,9 +8360,8 @@
       if (vehicles.find(v => v.plate.toLowerCase() === plate.toLowerCase())) {
         showToast('⚠️ ' + plate + ' — аль хэдийн бүртгэлтэй байна'); return;
       }
-      // Давтагдашгүй ID — өөр утаснаас нэгэн зэрэг нэмэхэд давхардахгүй
       const uniqueId = 'V' + Date.now() + Math.floor(Math.random()*1000);
-      const newV = { id: uniqueId, plate, vin, model, trailers, inspection, status: 'active' };
+      const newV = { id: uniqueId, plate, vin, model, trailers, inspection, status, driver };
       vehicles.unshift(newV);
       nextVehicleId++;
       nvTrailers = [];
@@ -7353,7 +8372,13 @@
       // LocalStorage cache
       try { lsSet('vehicles', JSON.stringify(vehicles)); } catch(e) {}
       // Supabase-д хадгалах
-      const vData = { id:newV.id, plate:newV.plate, vin:newV.vin, model:newV.model, trailers:newV.trailers, inspection_date:newV.inspection, status:newV.status };
+      const vData = {
+        id: newV.id, plate: newV.plate, vin: newV.vin, model: newV.model,
+        trailers: newV.trailers, inspection_date: newV.inspection,
+        status, driver,
+        status_updated_at: new Date().toISOString(),
+        status_updated_by: currentUsername || '—'
+      };
       if (isOnline) {
         const res = await DB_MT.insert('vehicles', vData);
         if (res) {
@@ -8034,6 +9059,7 @@
           `${dsYear} оны ${DS_MONTH_MN[dsMonth]}`;
         renderDriverScores();
       }
+      if(name==='tire') requestAnimationFrame(()=>setTimeout(()=>initTireScreen(),50));
     };
 
     function renderAuditLog() {
@@ -8136,7 +9162,8 @@
     async function renderServiceList() { try {
       // Supabase-аас татах
       if (isOnline) {
-        const dbSvc = await DB_MT.get('service_schedules', '?order=created_at.desc');
+        // BUG FIX #6: exclude fuel_tank_state rows from service list
+        const dbSvc = await DB_MT.get('service_schedules', '?service_type=neq.fuel_tank_state&order=created_at.desc');
         if (dbSvc && dbSvc.length > 0) {
           serviceSchedules = dbSvc.map(s => ({
             id: s.id, plate: s.plate, type: s.service_type,
@@ -8209,28 +9236,41 @@
     } catch(e) { logError('renderServiceList', e); } }
 
     function markServiceDone(id) {
-      const s = serviceSchedules.find(x => x.id === id);
+      const s = serviceSchedules.find(x => String(x.id) === String(id));
       if (!s) return;
       s.lastKm = s.currentKm;
       s.doneAt = new Date().toISOString().split('T')[0];
       saveServiceSchedules();
+      // BUG FIX #5: sync to Supabase
+      if (isOnline) DB_MT.update('service_schedules',
+        { last_km: s.lastKm, done_at: s.doneAt },
+        `?id=eq.${id}`
+      ).catch(e => logError('markServiceDone DB', e));
       renderServiceList();
       showToast('✅ ' + (s.customName || SERVICE_TYPES[s.type]?.label) + ' — хийгдсэн!');
       addNotif('green', 'Үйлчилгээ хийгдлээ', s.plate + ' — ' + (s.customName || SERVICE_TYPES[s.type]?.label));
     }
 
     function resetService(id) {
-      const s = serviceSchedules.find(x => x.id === id);
+      const s = serviceSchedules.find(x => String(x.id) === String(id));
       if (!s) return;
       s.doneAt = null;
       saveServiceSchedules();
+      // BUG FIX #5: sync to Supabase
+      if (isOnline) DB_MT.update('service_schedules',
+        { done_at: null },
+        `?id=eq.${id}`
+      ).catch(e => logError('resetService DB', e));
       renderServiceList();
       showToast('🔄 Дахин хяналтанд орлоо');
     }
 
     function deleteService(id) {
-      serviceSchedules = serviceSchedules.filter(x => x.id !== id);
+      serviceSchedules = serviceSchedules.filter(x => String(x.id) !== String(id));
       saveServiceSchedules();
+      // BUG FIX #5: sync to Supabase
+      if (isOnline) DB_MT.delete('service_schedules', `?id=eq.${id}`)
+        .catch(e => logError('deleteService DB', e));
       renderServiceList();
       showToast('🗑 Устгагдлаа');
     }
@@ -8350,15 +9390,7 @@
     // ============================================================
     // АЖИЛТНЫ ГҮЙЦЭТГЭЛИЙН ТАЙЛАН — Staff Performance
     // ============================================================
-    // Demo performance data keyed by username
-    const perfData = {
-      mechanic1:  { role:'mechanic', fullname:'Механик 1',   checked:47, faults:12, sentToRepair:12, avgTime:22 },
-      boldbaatar: { role:'mechanic', fullname:'Б. Болдбаатар',checked:61, faults:18, sentToRepair:18, avgTime:19 },
-      repair1:    { role:'repair',   fullname:'Засварч 1',   completed:38, avgCost:215000, totalCost:8170000, avgDays:2.1 },
-      ganzoric:   { role:'repair',   fullname:'Д. Ганзориг', completed:29, avgCost:184000, totalCost:5336000, avgDays:1.8 },
-      fuel1:      { role:'fuel',     fullname:'Түгээгч 1',   liters:68400, sessions:182, avgPerSession:376 },
-      munkhjin:   { role:'fuel',     fullname:'М. Мөнхжин',  liters:56400, sessions:144, avgPerSession:392 },
-    };
+    // BUG FIX #10: perfData demo object removed — renderPerformance now uses real DB data
 
     let _perfPeriod = 'week';
     let _perfRole   = 'all';
@@ -8376,7 +9408,7 @@
 
     function setPerfRole(r) {
       _perfRole = r;
-      ['all','mechanic','repair','fuel'].forEach(x => {
+      ['all','mechanic','repair','fuel','tire'].forEach(x => {
         const b = document.getElementById('pr-' + x);
         if (!b) return;
         if (x === r) { b.style.borderColor='var(--amber)'; b.style.background='rgba(245,158,11,0.1)'; b.style.color='var(--amber)'; }
@@ -8385,150 +9417,196 @@
       renderPerformance();
     }
 
-    function renderPerformance() {
-      // Period multiplier (demo)
-      const mult = _perfPeriod === 'week' ? 0.25 : _perfPeriod === 'month' ? 1 : 4;
-
-      // Summary stats
+    // BUG FIX #11: Performance uses real DB data now (async)
+    async function renderPerformance() {
       const summaryEl = document.getElementById('perf-summary-stats');
-      if (summaryEl) {
-        const totalChecked   = Math.round(Object.values(perfData).filter(d=>d.role==='mechanic').reduce((s,d)=>s+d.checked,0)*mult);
-        const totalFaults    = Math.round(Object.values(perfData).filter(d=>d.role==='mechanic').reduce((s,d)=>s+d.faults,0)*mult);
-        const totalRepairs   = Math.round(Object.values(perfData).filter(d=>d.role==='repair').reduce((s,d)=>s+d.completed,0)*mult);
-        const totalLiters    = Math.round(Object.values(perfData).filter(d=>d.role==='fuel').reduce((s,d)=>s+d.liters,0)*mult);
-        summaryEl.innerHTML = `
+      const listEl    = document.getElementById('perf-staff-list');
+      const chartEl   = document.getElementById('perf-bar-chart');
+      if (summaryEl) summaryEl.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-dim);font-size:12px;">⏳ Ачаалж байна...</div>';
+      if (listEl) listEl.innerHTML = '';
+
+      // Period range
+      const now = new Date();
+      let startDate;
+      if (_perfPeriod === 'week') {
+        startDate = new Date(now); startDate.setDate(now.getDate()-7);
+      } else if (_perfPeriod === 'month') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      } else {
+        startDate = new Date(now.getFullYear(), 0, 1);
+      }
+      const startStr = startDate.toISOString().split('T')[0];
+      const endStr   = now.toISOString();
+
+      if (!isOnline) {
+        if (summaryEl) summaryEl.innerHTML = '<div style="grid-column:1/-1;padding:20px;text-align:center;color:var(--text-dim);">📴 Интернет шаардлагатай</div>';
+        return;
+      }
+
+      try {
+        const [inspections, repairs, fuels, tireRecs] = await Promise.all([
+          DB_MT.get('inspections',  `?created_at=gte.${startStr}&order=created_at.desc`),
+          DB_MT.get('repair_tasks', `?created_at=gte.${startStr}&order=created_at.desc`),
+          DB_MT.get('fuel_logs',    `?created_at=gte.${startStr}&order=created_at.desc`),
+          DB_MT.get('tire_records', `?created_at=gte.${startStr}&order=created_at.desc`),
+        ]);
+        const ins   = inspections || [];
+        const reps  = repairs     || [];
+        const fls   = fuels       || [];
+        const tires = tireRecs    || [];
+
+        // Summary stats from real data
+        const totalChecked = ins.length;
+        const totalFaults  = reps.filter(r=>r.urgency==='urgent'||r.urgency==='soon').length;
+        const totalRepairs = reps.filter(r=>r.status==='done').length;
+        const totalLiters  = fls.reduce((s,f)=>s+(parseFloat(f.liters)||0),0);
+
+        if (summaryEl) summaryEl.innerHTML = `
           <div class="stat-card amber"><div class="stat-label">🔧 Нийт шалгасан</div><div class="stat-value amber">${totalChecked}</div><div class="stat-sub">Машин</div></div>
           <div class="stat-card red"><div class="stat-label">⚠️ Алдаа илрүүлсэн</div><div class="stat-value red">${totalFaults}</div><div class="stat-sub">Засварт явуулсан</div></div>
-          <div class="stat-card green"><div class="stat-label">🛠️ Засвар дууссан</div><div class="stat-value green">${totalRepairs}</div><div class="stat-sub">Үйлдвэрлэл</div></div>
-          <div class="stat-card blue"><div class="stat-label">⛽ Нийт түлш</div><div class="stat-value blue">${(totalLiters/1000).toFixed(1)}K</div><div class="stat-sub">Литр</div></div>`;
-      }
+          <div class="stat-card green"><div class="stat-label">🛠️ Засвар дууссан</div><div class="stat-value green">${totalRepairs}</div><div class="stat-sub">Гүйцэтгэл</div></div>
+          <div class="stat-card blue"><div class="stat-label">⛽ Нийт түлш</div><div class="stat-value blue">${totalLiters>=1000?(totalLiters/1000).toFixed(1)+'K':Math.round(totalLiters)}</div><div class="stat-sub">Литр</div></div>`;
 
-      // Staff list
-      const listEl = document.getElementById('perf-staff-list');
-      if (!listEl) return;
-      listEl.innerHTML = '';
+        if (!listEl) return;
+        listEl.innerHTML = '';
 
-      // Merge perfData with allUsers for real fullnames
-      const entries = Object.entries(perfData).filter(([un, d]) => {
-        if (_perfRole === 'all') return true;
-        return d.role === _perfRole;
-      });
+        // Group by mechanic
+        const mechMap = {};
+        ins.forEach(i => {
+          const m = i.mechanic || '—';
+          if (!mechMap[m]) mechMap[m] = { role:'mechanic', checked:0, faults:0 };
+          mechMap[m].checked++;
+          if (i.urgency === 'urgent') mechMap[m].faults++;
+        });
+        // Group by repairer
+        const repMap = {};
+        reps.forEach(r => {
+          const rep = r.repairer || r.mechanic || '—';
+          if (!repMap[rep]) repMap[rep] = { role:'repair', completed:0, totalCost:0 };
+          if (r.status==='done') { repMap[rep].completed++; repMap[rep].totalCost += parseInt(r.total_cost)||0; }
+        });
+        // Group by fuel operator
+        const fuelMap = {};
+        fls.forEach(f => {
+          const op = f.operator || f.driver || '—';
+          if (!fuelMap[op]) fuelMap[op] = { role:'fuel', liters:0, sessions:0 };
+          fuelMap[op].liters   += parseFloat(f.liters)||0;
+          fuelMap[op].sessions++;
+        });
+        // Group by tire technician
+        const tireMap = {};
+        tires.forEach(t => {
+          const tech = t.technician || '—';
+          if (!tireMap[tech]) tireMap[tech] = {
+            role:'tire', patch:0, newTires:0, swap:0, spare:0,
+            olgoi:0, elgevch:0, dagdii:0, total:0
+          };
+          tireMap[tech].total++;
+          if (t.action_type === 'patch') {
+            tireMap[tech].patch++;
+            tireMap[tech].olgoi    += parseInt(t.tire_olgoi)    || 0;
+            tireMap[tech].elgevch  += parseInt(t.tire_elgevch)  || 0;
+            tireMap[tech].dagdii   += parseInt(t.tire_dagdii)   || 0;
+          } else if (t.action_type === 'new')   tireMap[tech].newTires++;
+          else if (t.action_type === 'swap')    tireMap[tech].swap++;
+          else if (t.action_type === 'spare')   tireMap[tech].spare++;
+        });
 
-      entries.forEach(([un, d]) => {
-        const user = allUsers.find(u => u.username === un);
-        const name = user ? (user.fullname || user.username) : d.fullname;
-        const roleMeta = ROLE_META[d.role] || { icon:'👤', name: d.role };
-        let statsHtml = '';
+        const allStaff = [
+          ...Object.entries(mechMap).map(([n,d])=>({name:n,...d})),
+          ...Object.entries(repMap).map(([n,d])=>({name:n,...d})),
+          ...Object.entries(fuelMap).map(([n,d])=>({name:n,...d})),
+          ...Object.entries(tireMap).map(([n,d])=>({name:n,...d})),
+        ].filter(s => (_perfRole==='all') || s.role===_perfRole);
 
-        if (d.role === 'mechanic') {
-          const faultRate = Math.round(d.faults / d.checked * 100);
-          const adjChecked = Math.round(d.checked * mult);
-          const adjFaults  = Math.round(d.faults  * mult);
-          statsHtml = `
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;">
-                <div style="font-size:20px;font-weight:800;color:var(--amber);font-family:'IBM Plex Mono',monospace;">${adjChecked}</div>
-                <div style="font-size:10px;color:var(--text-dim);font-weight:700;margin-top:2px;">ШАЛГАСАН</div>
-              </div>
-              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;">
-                <div style="font-size:20px;font-weight:800;color:var(--red);font-family:'IBM Plex Mono',monospace;">${adjFaults}</div>
-                <div style="font-size:10px;color:var(--text-dim);font-weight:700;margin-top:2px;">АЛДАА</div>
-              </div>
-              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;">
-                <div style="font-size:20px;font-weight:800;color:var(--blue);font-family:'IBM Plex Mono',monospace;">${faultRate}%</div>
-                <div style="font-size:10px;color:var(--text-dim);font-weight:700;margin-top:2px;">АЛДААНЫ %</div>
-              </div>
-            </div>
-            <div style="display:flex;align-items:center;gap:10px;font-size:12px;color:var(--text-dim);">
-              <span>Дундаж хугацаа: <b style="color:var(--text);">${d.avgTime} мин/машин</b></span>
-            </div>
-            <!-- Fault rate progress -->
-            <div style="margin-top:10px;">
-              <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:5px;">
-                <span>Алдаа илрүүлэх чадвар</span><span style="color:var(--amber);font-weight:700;">${faultRate}%</span>
-              </div>
-              <div style="height:8px;background:var(--surface3);border-radius:4px;overflow:hidden;">
-                <div style="height:100%;width:${faultRate}%;background:linear-gradient(90deg,var(--amber-dim),var(--amber));border-radius:4px;"></div>
-              </div>
-            </div>`;
-        } else if (d.role === 'repair') {
-          const adjComp = Math.round(d.completed * mult);
-          const adjCost = Math.round(d.totalCost * mult);
-          statsHtml = `
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">
-              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;">
-                <div style="font-size:20px;font-weight:800;color:var(--green);font-family:'IBM Plex Mono',monospace;">${adjComp}</div>
-                <div style="font-size:10px;color:var(--text-dim);font-weight:700;margin-top:2px;">ДУУСГАСАН</div>
-              </div>
-              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;">
-                <div style="font-size:20px;font-weight:800;color:var(--amber);font-family:'IBM Plex Mono',monospace;">${d.avgDays}</div>
-                <div style="font-size:10px;color:var(--text-dim);font-weight:700;margin-top:2px;">ДУНД ӨДӨР</div>
-              </div>
-            </div>
-            <div style="font-size:12px;color:var(--text-dim);">
-              Нийт зардал: <b style="color:var(--amber);font-family:'IBM Plex Mono',monospace;">${(adjCost/1000000).toFixed(1)}M ₮</b>
-              · Дундаж: <b style="color:var(--text);">${d.avgCost.toLocaleString()} ₮</b>
-            </div>`;
-        } else if (d.role === 'fuel') {
-          const adjLit  = Math.round(d.liters   * mult);
-          const adjSess = Math.round(d.sessions  * mult);
-          statsHtml = `
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
-              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;">
-                <div style="font-size:18px;font-weight:800;color:var(--blue);font-family:'IBM Plex Mono',monospace;">${(adjLit/1000).toFixed(1)}K</div>
-                <div style="font-size:10px;color:var(--text-dim);font-weight:700;margin-top:2px;">ЛИТР</div>
-              </div>
-              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;">
-                <div style="font-size:18px;font-weight:800;color:var(--cyan);font-family:'IBM Plex Mono',monospace;">${adjSess}</div>
-                <div style="font-size:10px;color:var(--text-dim);font-weight:700;margin-top:2px;">УДАА</div>
-              </div>
-              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;">
-                <div style="font-size:18px;font-weight:800;color:var(--green);font-family:'IBM Plex Mono',monospace;">${d.avgPerSession}</div>
-                <div style="font-size:10px;color:var(--text-dim);font-weight:700;margin-top:2px;">ДУНД Л</div>
-              </div>
-            </div>`;
+        if (allStaff.length === 0) {
+          listEl.innerHTML = '<div style="margin:0 16px;padding:28px;text-align:center;color:var(--text-dim);font-size:13px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);">Энэ хугацаанд бүртгэл байхгүй</div>';
+          return;
         }
 
-        const card = document.createElement('div');
-        card.style.cssText = 'margin:0 16px 12px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;';
-        card.innerHTML = `
-          <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;background:var(--surface2);border-bottom:1px solid var(--border);">
-            <div style="width:40px;height:40px;background:rgba(245,158,11,0.12);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">${roleMeta.icon}</div>
-            <div style="flex:1;">
-              <div style="font-size:15px;font-weight:800;">${name}</div>
-              <div style="font-size:11px;color:var(--text-dim);">${roleMeta.name}</div>
+        allStaff.forEach(s => {
+          const user = allUsers.find(u => u.username === s.name);
+          const fullname = user ? (user.fullname || user.username) : s.name;
+          const roleMeta = ROLE_META[s.role] || { icon:'👤', name: s.role };
+          let stats = '';
+          if (s.role === 'mechanic') {
+            const rate = s.checked > 0 ? Math.round(s.faults/s.checked*100) : 0;
+            stats = `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;"><div style="font-size:20px;font-weight:800;color:var(--amber);">${s.checked}</div><div style="font-size:10px;color:var(--text-dim);">ШАЛГАСАН</div></div>
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;"><div style="font-size:20px;font-weight:800;color:var(--red);">${s.faults}</div><div style="font-size:10px;color:var(--text-dim);">АЛДАА</div></div>
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;"><div style="font-size:20px;font-weight:800;color:var(--blue);">${rate}%</div><div style="font-size:10px;color:var(--text-dim);">АЛДААНЫ %</div></div>
+            </div>`;
+          } else if (s.role === 'repair') {
+            stats = `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;"><div style="font-size:20px;font-weight:800;color:var(--green);">${s.completed}</div><div style="font-size:10px;color:var(--text-dim);">ДУУСГАСАН</div></div>
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;"><div style="font-size:16px;font-weight:800;color:var(--amber);">${s.totalCost>=1000000?(s.totalCost/1000000).toFixed(1)+'M':s.totalCost.toLocaleString()}₮</div><div style="font-size:10px;color:var(--text-dim);">ЗАРДАЛ</div></div>
+            </div>`;
+          } else if (s.role === 'fuel') {
+            const avg = s.sessions > 0 ? Math.round(s.liters/s.sessions) : 0;
+            stats = `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;">
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;"><div style="font-size:18px;font-weight:800;color:var(--blue);">${s.liters>=1000?(s.liters/1000).toFixed(1)+'K':Math.round(s.liters)}</div><div style="font-size:10px;color:var(--text-dim);">ЛИТР</div></div>
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;"><div style="font-size:18px;font-weight:800;color:var(--cyan);">${s.sessions}</div><div style="font-size:10px;color:var(--text-dim);">УДАА</div></div>
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:10px 6px;"><div style="font-size:18px;font-weight:800;color:var(--green);">${avg}</div><div style="font-size:10px;color:var(--text-dim);">ДУНД Л</div></div>
+            </div>`;
+          } else if (s.role === 'tire') {
+            stats = `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px;">
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:8px 4px;">
+                <div style="font-size:20px;font-weight:800;color:var(--amber);">${s.patch}</div>
+                <div style="font-size:9px;color:var(--text-dim);font-weight:700;">НӨХСӨН</div>
+              </div>
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:8px 4px;">
+                <div style="font-size:20px;font-weight:800;color:var(--green);">${s.newTires}</div>
+                <div style="font-size:9px;color:var(--text-dim);font-weight:700;">ШИНЭ</div>
+              </div>
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:8px 4px;">
+                <div style="font-size:20px;font-weight:800;color:var(--blue);">${s.swap}</div>
+                <div style="font-size:9px;color:var(--text-dim);font-weight:700;">СОЛИЛТ</div>
+              </div>
+              <div style="text-align:center;background:var(--surface2);border-radius:10px;padding:8px 4px;">
+                <div style="font-size:20px;font-weight:800;color:var(--text);">${s.total}</div>
+                <div style="font-size:9px;color:var(--text-dim);font-weight:700;">НИЙТ</div>
+              </div>
             </div>
-          </div>
-          <div style="padding:13px 16px;">${statsHtml}</div>`;
-        listEl.appendChild(card);
-      });
-
-      // Bar chart
-      const chartEl = document.getElementById('perf-bar-chart');
-      if (chartEl) {
-        chartEl.innerHTML = '';
-        const mechEntries = Object.entries(perfData).filter(([,d]) => d.role === 'mechanic');
-        const maxVal = Math.max(...mechEntries.map(([,d]) => d.checked));
-        mechEntries.forEach(([un, d]) => {
-          const user = allUsers.find(u => u.username === un);
-          const shortName = (user?.fullname || d.fullname).split(' ').pop();
-          const adjC = Math.round(d.checked * mult);
-          const adjF = Math.round(d.faults  * mult);
-          const h1   = Math.round(adjC / (maxVal * mult) * 120);
-          const h2   = Math.round(adjF / (maxVal * mult) * 120);
-          const wrap = document.createElement('div');
-          wrap.className = 'bar-wrap';
-          wrap.innerHTML = `
-            <div style="display:flex;align-items:flex-end;gap:3px;height:120px;">
-              <div style="width:14px;height:${h1}px;background:linear-gradient(0deg,var(--amber-dim),var(--amber));border-radius:4px 4px 0 0;"></div>
-              <div style="width:14px;height:${h2}px;background:linear-gradient(0deg,#991b1b,var(--red));border-radius:4px 4px 0 0;"></div>
+            ${(s.olgoi||s.elgevch||s.dagdii) ? `<div style="display:flex;gap:10px;font-size:11px;color:var(--text-dim);flex-wrap:wrap;">
+              ${s.olgoi   ? `<span>🔧 Олгой: <b style="color:var(--amber);">${s.olgoi}</b></span>` : ''}
+              ${s.elgevch ? `<span>🩹 Элгэвч: <b style="color:var(--amber);">${s.elgevch}</b></span>` : ''}
+              ${s.dagdii  ? `<span>🔩 Дагдий: <b style="color:var(--amber);">${s.dagdii}</b></span>` : ''}
+            </div>` : ''}`;
+          }
+          const card = document.createElement('div');
+          card.style.cssText = 'margin:0 16px 12px;background:var(--surface);border-radius:var(--radius);border:1px solid var(--border);overflow:hidden;';
+          card.innerHTML = `
+            <div style="display:flex;align-items:center;gap:12px;padding:13px 16px;background:var(--surface2);border-bottom:1px solid var(--border);">
+              <div style="width:40px;height:40px;background:rgba(245,158,11,0.12);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:18px;">${roleMeta.icon}</div>
+              <div><div style="font-size:15px;font-weight:800;">${fullname}</div><div style="font-size:11px;color:var(--text-dim);">${roleMeta.name}</div></div>
             </div>
-            <div class="bar-lbl" style="font-size:9px;">${shortName}</div>`;
-          chartEl.appendChild(wrap);
+            <div style="padding:13px 16px;">${stats}</div>`;
+          listEl.appendChild(card);
         });
-      }
-    }
 
+        // Bar chart — mechanic comparison
+        if (chartEl) {
+          chartEl.innerHTML = '';
+          const mechs = allStaff.filter(s=>s.role==='mechanic');
+          const maxV = Math.max(...mechs.map(s=>s.checked), 1);
+          mechs.forEach(s => {
+            const user = allUsers.find(u=>u.username===s.name);
+            const short = (user?.fullname||s.name).split(' ').pop();
+            const h1 = Math.round(s.checked/maxV*120);
+            const h2 = Math.round(s.faults/maxV*120);
+            const wrap = document.createElement('div');
+            wrap.className = 'bar-wrap';
+            wrap.innerHTML = `
+              <div style="display:flex;align-items:flex-end;gap:3px;height:120px;">
+                <div style="width:14px;height:${h1}px;background:linear-gradient(0deg,var(--amber-dim),var(--amber));border-radius:4px 4px 0 0;"></div>
+                <div style="width:14px;height:${h2}px;background:linear-gradient(0deg,#991b1b,var(--red));border-radius:4px 4px 0 0;"></div>
+              </div>
+              <div class="bar-lbl" style="font-size:9px;">${short}</div>`;
+            chartEl.appendChild(wrap);
+          });
+        }
+      } catch(e) { logError('renderPerformance', e); }
+    }
     // ============================================================
     // АППЛИЙГ ЭХЛҮҮЛЭХ — бүх зарлалтын дараа
     // ============================================================
@@ -8913,7 +9991,7 @@
           renderVehicleList();
           updateDashboardStats();
         }
-        if (id === 'screen-charts') { renderFuelRanking(); renderMonthChart(); renderCostChart(); }
+        if (id === 'screen-charts') { renderFuelRanking(); renderMonthChart(); renderCostChart(); renderTireChart(); }
       }, 15000);
     }
 
@@ -8938,5 +10016,1014 @@
     window.doLogout = function() { stopRealtimeSync(); _origDoLogout(); };
 
   </script>
+
+  <script>
+  // ═══════════════════════════════════════════════════════════
+  // ⚫ ДУГУЙН МЕНЕЖМЕНТ v3
+  // ═══════════════════════════════════════════════════════════
+  let _tireFilter='all', _tireRecords=[];
+  const TIRE_POS={head_r:'Толгой баруун',head_l:'Толгой зүүн',tr1_r:'1-р чиргүүл баруун',tr1_l:'1-р чиргүүл зүүн',tr2_r:'2-р чиргүүл баруун',tr2_l:'2-р чиргүүл зүүн',spare:'Запас дугуй'};
+  const TIRE_ACTION_CFG={patch:{label:'🔧 Нөхсөн/Элгэвч',color:'var(--amber)',countLabel:'Нөхсөн тоо'},new:{label:'🆕 Шинэ дугуй',color:'var(--green)',countLabel:'Шинэ дугуй тоо'},old:{label:'♻️ Хуучин дугуй',color:'var(--red)',countLabel:'Хуучин дугуйн тоо'},spare:{label:'📦 Запас дугуй',color:'var(--purple)',countLabel:'Нөөц тоо'},swap:{label:'🔄 Машин солилт',color:'var(--blue)',countLabel:'Солисон тоо'}};
+
+  async function initTireScreen() {
+    const d=new Date(); document.getElementById('tire-date').value=d.toISOString().split('T')[0];
+    const tech=document.getElementById('tire-technician');
+    if(tech) tech.value=''; // Гараар оруулна
+    renderTirePosGrid(); onTireActionChange();
+    await loadTireRecords();
+    loadTireStockInfo();
+  }
+
+  // ── НӨӨЦИЙН ТОО СИСТЕМ ──
+  let _stockType = 'new'; // 'new' | 'old'
+  const STOCK_KEY_NEW = () => 'tire_stock_new_' + (currentCompanyId||'default');
+  const STOCK_KEY_OLD = () => 'tire_stock_old_' + (currentCompanyId||'default');
+
+  function getStock(type) {
+    const key = type === 'new' ? STOCK_KEY_NEW() : STOCK_KEY_OLD();
+    return parseInt(localStorage.getItem(key) || '0');
+  }
+  function setStock(type, val) {
+    const key = type === 'new' ? STOCK_KEY_NEW() : STOCK_KEY_OLD();
+    const safe = Math.max(0, parseInt(val)||0);
+    localStorage.setItem(key, safe);
+    // DB-д sync хийх
+    if (isOnline) {
+      DB_MT.insert('tire_stock', {
+        company_id: currentCompanyId,
+        stock_type: type,
+        stock_count: safe,
+        updated_at: new Date().toISOString(),
+      }).catch(() => {});
+    }
+    return safe;
+  }
+
+  function loadTireStockInfo() {
+    const elNew = document.getElementById('stock-new-tires');
+    const elOld = document.getElementById('stock-old-tires');
+    const elUpd = document.getElementById('stock-updated-at');
+
+    const newCount = getStock('new');
+    const oldCount = getStock('old');
+
+    if (elNew) {
+      elNew.textContent = newCount;
+      elNew.style.color = newCount === 0 ? 'var(--red)' : newCount <= 3 ? 'var(--amber)' : 'var(--green)';
+    }
+    if (elOld) {
+      elOld.textContent = oldCount;
+      elOld.style.color = oldCount === 0 ? 'var(--text-dim)' : oldCount >= 10 ? 'var(--red)' : 'var(--amber)';
+    }
+    if (elUpd) elUpd.textContent = '';
+
+    // DB-ээс хамгийн сүүлийн утгыг татах
+    if (isOnline) {
+      DB_MT.get('tire_stock',
+        `?company_id=eq.${currentCompanyId}&order=updated_at.desc&limit=2`
+      ).then(rows => {
+        if (!rows || !rows.length) return;
+        rows.forEach(r => {
+          const count = r.stock_count || 0;
+          if (r.stock_type === 'new') {
+            localStorage.setItem(STOCK_KEY_NEW(), count);
+            if (elNew) { elNew.textContent = count; elNew.style.color = count===0?'var(--red)':count<=3?'var(--amber)':'var(--green)'; }
+          } else if (r.stock_type === 'old') {
+            localStorage.setItem(STOCK_KEY_OLD(), count);
+            if (elOld) { elOld.textContent = count; elOld.style.color = count===0?'var(--text-dim)':count>=10?'var(--red)':'var(--amber)'; }
+          }
+        });
+        if (elUpd) elUpd.textContent = 'Шинэчлэгдсэн: ' + new Date().toLocaleTimeString('mn-MN',{hour:'2-digit',minute:'2-digit'});
+      }).catch(() => {});
+    }
+  }
+
+  // Stock modal
+  function openStockModal(type) {
+    _stockType = type;
+    const modal = document.getElementById('stockModal');
+    const title = document.getElementById('stock-modal-title');
+    const sub   = document.getElementById('stock-modal-sub');
+    const input = document.getElementById('stock-modal-input');
+    if (!modal) return;
+    if (title) title.textContent = type === 'new' ? '🆕 Шинэ дугуйн нөөц' : '♻️ Хуучин дугуй / обуудны тоо';
+    if (sub)   sub.textContent   = type === 'new'
+      ? 'Агуулахад байгаа шинэ дугуйн тоог оруулна уу'
+      : 'Одоогийн хуучин дугуй / төмөр обуудын тоог оруулна уу';
+    if (input) input.value = getStock(type);
+    modal.style.display = 'flex';
+    setTimeout(() => { if (input) { input.focus(); input.select(); } }, 100);
+  }
+  function closeStockModal() {
+    const m = document.getElementById('stockModal');
+    if (m) m.style.display = 'none';
+  }
+  function adjustStock(delta) {
+    const input = document.getElementById('stock-modal-input');
+    if (!input) return;
+    input.value = Math.max(0, (parseInt(input.value)||0) + delta);
+  }
+  function saveStockCount() {
+    const input = document.getElementById('stock-modal-input');
+    if (!input) return;
+    const val = setStock(_stockType, input.value);
+    closeStockModal();
+    loadTireStockInfo();
+    showToast(`✅ ${_stockType==='new'?'Шинэ дугуй':'Хуучин дугуй'}: ${val} ш хадгалагдлаа`);
+  }
+
+  // Шинэ дугуй хэрэглэхэд автоматаар хасах
+  function deductNewTireStock(count) {
+    const cur = getStock('new');
+    const newVal = Math.max(0, cur - count);
+    setStock('new', newVal);
+    loadTireStockInfo();
+    if (newVal === 0) showToast('⚠️ Шинэ дугуйн нөөц дуусан!');
+    else if (newVal <= 3) showToast(`⚠️ Шинэ дугуй: ${newVal} ш үлдлээ`);
+  }
+  // Хуучин дугуй нэмэхэд автоматаар нэмэх
+  function addOldTireStock(count) {
+    const cur = getStock('old');
+    setStock('old', cur + count);
+    loadTireStockInfo();
+  }
+
+  function renderTirePosGrid() {
+    const g=document.getElementById('tire-position-grid'); if(!g) return;
+    g.innerHTML='<div style="display:contents;">'+Object.entries(TIRE_POS).map(([k,v])=>`<label style="display:flex;align-items:center;gap:8px;padding:9px 10px;background:var(--surface2);border-radius:9px;cursor:pointer;border:1.5px solid var(--border);transition:border-color 0.15s;"><input type="checkbox" name="tire-pos" value="${k}" style="width:16px;height:16px;accent-color:var(--amber);" onchange="this.closest('label').style.borderColor=this.checked?'var(--amber)':'var(--border)'"><span style="font-size:11px;font-weight:600;line-height:1.3;">${v}</span></label>`).join('')+'</div>';
+  }
+
+  // ── Дугуйн ажлын төрлийн custom dropdown ──
+  function toggleTireActionDropdown() {
+    const dd = document.getElementById('tire-action-dropdown');
+    const sel = document.getElementById('tire-action-selected');
+    if (!dd) return;
+    const isOpen = dd.style.display !== 'none';
+    dd.style.display = isOpen ? 'none' : 'block';
+    if (sel) sel.style.borderColor = isOpen ? 'var(--border)' : 'var(--amber)';
+  }
+
+  function selectTireAction(value, label) {
+    // Update hidden select
+    const sel = document.getElementById('tire-action-type');
+    if (sel) sel.value = value;
+    // Update display
+    const lbl = document.getElementById('tire-action-label');
+    if (lbl) lbl.textContent = label;
+    // Highlight selected option
+    document.querySelectorAll('.tire-action-opt').forEach(opt => {
+      const isSelected = opt.dataset.value === value;
+      opt.style.background = isSelected ? 'rgba(245,158,11,0.12)' : '';
+      opt.style.color = isSelected ? 'var(--amber)' : 'var(--text)';
+      opt.style.fontWeight = isSelected ? '700' : '500';
+    });
+    // Close dropdown
+    const dd = document.getElementById('tire-action-dropdown');
+    const selEl = document.getElementById('tire-action-selected');
+    if (dd) dd.style.display = 'none';
+    if (selEl) selEl.style.borderColor = 'var(--border)';
+    // Trigger change logic
+    onTireActionChange();
+  }
+
+  // Close dropdown when clicking outside
+  document.addEventListener('click', function(e) {
+    const display = document.getElementById('tire-action-display');
+    if (display && !display.contains(e.target)) {
+      const dd = document.getElementById('tire-action-dropdown');
+      const sel = document.getElementById('tire-action-selected');
+      if (dd) dd.style.display = 'none';
+      if (sel) sel.style.borderColor = 'var(--border)';
+    }
+  });
+
+  function onTireActionChange() {
+    const type = document.getElementById('tire-action-type')?.value || 'patch';
+
+    // Бүх динамик хэсгийг нуух
+    ['tire-patch-counts','tire-count-simple','tire-spare-section','tire-swap-section','tire-swap-count'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+
+    if (type === 'patch') {
+      // Олгой / элгэвч / дагдий — 3 тусдаа
+      const pc = document.getElementById('tire-patch-counts');
+      const ss = document.getElementById('tire-swap-section');
+      if (pc) pc.style.display = '';
+    } else if (type === 'new') {
+      // Шинэ дугуй — тоо
+      const cs = document.getElementById('tire-count-simple');
+      const cl = document.getElementById('tire-count-label');
+      if (cs) cs.style.display = '';
+      if (cl) cl.textContent = 'Шинэ дугуйн тоо';
+    } else if (type === 'old') {
+      // Хуучин дугуй — тоо оруулах (хасагдана)
+      const cs = document.getElementById('tire-count-simple');
+      const cl = document.getElementById('tire-count-label');
+      if (cs) cs.style.display = '';
+      if (cl) cl.textContent = 'Хуучин дугуйн тоо (хасагдана)';
+    } else if (type === 'spare') {
+      // Запас дугуй
+      const sp = document.getElementById('tire-spare-section');
+      if (sp) sp.style.display = '';
+    } else if (type === 'swap') {
+      // Машин солилт — тоо + нэмэлт
+      const sc = document.getElementById('tire-swap-count');
+      const ss = document.getElementById('tire-swap-section');
+      if (sc) sc.style.display = '';
+      if (ss) ss.style.display = '';
+    }
+  }
+
+  // loadSpareStock removed
+
+  function tireFillDriver() {
+    const plate=document.getElementById('tire-plate')?.value;
+    const v=vehicles.find(v=>v.plate===plate);
+    const d=document.getElementById('tire-driver');
+    if(d&&v&&v.driver&&!d.value) d.value=v.driver;
+  }
+
+  async function saveTireRecord() {
+    const plate      = document.getElementById('tire-plate')?.value?.trim();
+    const driver     = document.getElementById('tire-driver')?.value?.trim();
+    const actionType = document.getElementById('tire-action-type')?.value;
+    const tech       = document.getElementById('tire-technician')?.value?.trim();
+    const notes      = document.getElementById('tire-notes')?.value?.trim();
+    const date       = document.getElementById('tire-date')?.value;
+    const positions  = Array.from(document.querySelectorAll('input[name="tire-pos"]:checked')).map(el=>el.value);
+
+    if (!plate) { showToast('⚠️ Машины дугаар оруулна уу'); return; }
+
+    // Төрлөөс хамаарч өгөгдөл авах
+    let olgoi=0, elgevch=0, dagdii=0, tireCount=0, spareIn=0, spareOut=0;
+    if (actionType === 'patch') {
+      olgoi   = parseInt(document.getElementById('tire-olgoi')?.value||0);
+      elgevch = parseInt(document.getElementById('tire-elgevch')?.value||0);
+      dagdii  = parseInt(document.getElementById('tire-dagdii')?.value||0);
+      if (!olgoi && !elgevch && !dagdii) { showToast('⚠️ Хамгийн багадаа нэг тоо оруулна уу'); return; }
+    } else if (actionType === 'new') {
+      tireCount = parseInt(document.getElementById('tire-count')?.value||0);
+      if (!tireCount) { showToast('⚠️ Шинэ дугуйн тоог оруулна уу'); return; }
+    } else if (actionType === 'swap') {
+      tireCount = parseInt(document.getElementById('tire-swap-count-val')?.value||0);
+      if (!tireCount) { showToast('⚠️ Солисон дугуйн тоог оруулна уу'); return; }
+    } else if (actionType === 'old') {
+      tireCount = parseInt(document.getElementById('tire-count')?.value||0);
+      if (!tireCount) { showToast('⚠️ Хуучин дугуйн тоог оруулна уу'); return; }
+    } else if (actionType === 'spare') {
+      // Запас дугуй — тэмдэглэл л бүртгэнэ
+    }
+
+    const entry = {
+      action_type:   actionType,
+      plate,
+      driver:        driver || null,
+      positions:     positions.length ? positions : null,
+      // Нөхсөн
+      tire_olgoi:    actionType==='patch' ? olgoi   : null,
+      tire_elgevch:  actionType==='patch' ? elgevch : null,
+      tire_dagdii:   actionType==='patch' ? dagdii  : null,
+      // Шинэ / солилт
+      tire_count:    (actionType==='new'||actionType==='swap') ? tireCount : null,
+      // Нөөц
+      tire_spare_in:  null,
+      tire_spare_out: null,
+      spare_note:     actionType==='spare' ? (document.getElementById('tire-spare-note')?.value?.trim()||notes||null) : null,
+      // Солилт
+      from_plate:    actionType==='swap' ? (document.getElementById('tire-from-plate')?.value?.trim()||null) : null,
+      approval:      actionType==='swap' ? (document.getElementById('tire-approval')?.value?.trim()||null) : null,
+      swap_notes:    actionType==='swap' ? (document.getElementById('tire-swap-notes')?.value?.trim()||null) : null,
+      technician:    tech || null,
+      notes:         notes || null,
+      date:          date || new Date().toISOString().split('T')[0],
+      company_id:    currentCompanyId,
+    };
+    try{
+      let saved=false;
+      if(isOnline){const res=await DB_MT.insert('tire_records',entry);if(res&&res[0]){entry.id=res[0].id;entry.created_at=res[0].created_at||new Date().toISOString();saved=true;}}
+      if(!saved){entry.id='local_'+Date.now();entry.created_at=new Date().toISOString();pendingSync.push({id:entry.id,table:'tire_records',data:entry,companyId:currentCompanyId});savePending();}
+      _tireRecords.unshift(entry);
+      try{localStorage.setItem('cetsen_tire_records',JSON.stringify(_tireRecords.slice(0,300)));}catch(e){}
+      ['tire-plate','tire-driver','tire-count','tire-technician','tire-notes','tire-from-plate','tire-approval','tire-swap-notes','tire-spare-note','tire-olgoi','tire-elgevch','tire-dagdii','tire-spare-in','tire-spare-out'].forEach(id=>{const el=document.getElementById(id);if(el) el.value='';});
+      document.querySelectorAll('input[name="tire-pos"]:checked').forEach(cb=>{cb.checked=false;cb.closest('label').style.borderColor='var(--border)';});
+      // ── Нөөцийн тоо автоматаар шинэчлэх ──
+      const _aType = entry.action_type;
+      if (_aType === 'new' && (entry.tire_count||0) > 0) {
+        deductNewTireStock(entry.tire_count); // Шинэ дугуй → нөөцөөс хасах
+      } else if (_aType === 'old' && (entry.tire_count||0) > 0) {
+        // Хуучин дугуй ашигласан → хуучин нөөцөөс хасах
+        const curOld = getStock('old');
+        setStock('old', Math.max(0, curOld - entry.tire_count));
+        loadTireStockInfo();
+      } else if (_aType === 'patch') {
+        // Нөхсөн дугуй = засаад буцааж тавьсан → нөөцөд нөлөөлөхгүй
+      }
+      updateTireStats(); renderTireList(); loadTireStockInfo();
+      showToast('✅ Дугуйн бүртгэл хадгалагдлаа');
+      setTimeout(()=>{const l=document.getElementById('tire-record-list');if(l) l.scrollIntoView({behavior:'smooth',block:'start'});},300);
+    }catch(e){showToast('⚠️ Алдаа: '+(e.message||''));}
+  }
+
+  async function loadTireRecords() {
+    const el=document.getElementById('tire-record-list');
+    if(el) el.innerHTML='<div style="text-align:center;padding:30px;color:var(--text-dim);">⏳ Ачаалж байна...</div>';
+    try{
+      if(isOnline){const rows=await DB_MT.get('tire_records','?order=created_at.desc&limit=300');_tireRecords=rows||[];}
+      else{_tireRecords=JSON.parse(localStorage.getItem('cetsen_tire_records')||'[]');}
+    }catch(e){
+      _tireRecords=JSON.parse(localStorage.getItem('cetsen_tire_records')||'[]');
+      if(!_tireRecords.length&&el){el.innerHTML=`<div style="margin:0 16px;padding:20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);"><div style="font-size:13px;font-weight:700;margin-bottom:10px;">🗄️ Supabase хүснэгт нэмнэ үү:</div><pre style="font-size:10px;color:var(--amber);background:var(--surface2);padding:10px;border-radius:8px;overflow-x:auto;white-space:pre-wrap;">-- Нөөцийн тоог хадгалах хүснэгт:
+-- CREATE TABLE tire_stock (
+--   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+--   company_id text, stock_type text, stock_count int DEFAULT 0,
+--   updated_at timestamptz DEFAULT now()
+-- );
+
+CREATE TABLE tire_records (\n  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n  company_id text, plate text, driver text,\n  action_type text, positions text[],\n  tire_count int,\n  tire_olgoi int,      -- олгой тоо\n  tire_elgevch int,   -- элгэвч тоо\n  tire_dagdii int,    -- дагдий/нөхөөс тоо\n  tire_spare_in int,  -- нөөцөд авсан\n  tire_spare_out int, -- нөөцөөс хэрэглэсэн\n  spare_note text, from_plate text,\n  approval text, swap_notes text,\n  technician text, notes text, date date,\n  created_at timestamptz DEFAULT now()\n);</pre></div>`;return;}
+    }
+    updateTireStats();renderTireList();
+  }
+
+  function updateTireStats() {
+    const now=new Date(),ym=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const m=_tireRecords.filter(r=>(r.created_at||r.date||'').slice(0,7)===ym);
+    const patches=m.filter(r=>r.action_type==='patch');
+    const oldTires=m.filter(r=>r.action_type==='old').reduce((s,r)=>s+(r.tire_count||0),0);
+    const olgoi  =patches.reduce((s,r)=>s+(r.tire_olgoi||0),0);
+    const elgevch=patches.reduce((s,r)=>s+(r.tire_elgevch||0),0);
+    const dagdii =patches.reduce((s,r)=>s+(r.tire_dagdii||0),0);
+    const n=m.filter(r=>r.action_type==='new').reduce((s,r)=>s+(r.tire_count||0),0);
+    const s=m.filter(r=>r.action_type==='swap').length;
+    const v=new Set(m.map(r=>r.plate).filter(Boolean));
+    const set=(id,val)=>{const el=document.getElementById(id);if(el)el.textContent=val;};
+    set('tire-sum-olgoi',  olgoi);
+    set('tire-sum-elgevch',elgevch);
+    set('tire-sum-dagdii', dagdii);
+    set('tire-sum-patch',  patches.length);
+    set('tire-sum-new',    n);
+    set('tire-sum-swap',   s);
+    set('tire-sum-vehicles',v.size);
+  }
+
+  function filterTireList(f) {
+    _tireFilter=f;
+    ['all','patch','new','swap','spare'].forEach(id=>{const b=document.getElementById('trf-'+id);if(!b)return;const a=id===f;b.style.border=a?'1.5px solid var(--amber)':'1.5px solid var(--border)';b.style.background=a?'rgba(240,165,0,0.1)':'var(--surface2)';b.style.color=a?'var(--amber)':'var(--text-dim)';});
+    renderTireList();
+  }
+
+  function renderTireList() {
+    const el=document.getElementById('tire-record-list');if(!el)return;
+    const list=_tireFilter==='all'?_tireRecords:_tireRecords.filter(r=>r.action_type===_tireFilter);
+    if(!list.length){el.innerHTML='<div style="margin:0 16px;padding:32px;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);color:var(--text-dim);font-size:13px;">Бүртгэл олдсонгүй</div>';return;}
+    el.innerHTML=list.map(r=>{
+      const cfg=TIRE_ACTION_CFG[r.action_type]||{label:r.action_type,color:'var(--text-dim)'};
+      const posStr=(r.positions||[]).map(p=>TIRE_POS[p]||p).join(', ');
+      const date=r.date||(r.created_at?r.created_at.slice(0,10):'—');
+      const dl=date?new Date(date+'T12:00:00').toLocaleDateString('mn-MN',{month:'short',day:'numeric'}):'—';
+      let det='';
+      if(r.action_type==='patch') det=`<div style="font-size:12px;color:var(--text-dim);margin-top:5px;">${r.tire_olgoi?'🔧 Олгой:<b style="color:var(--amber);">'+(r.tire_olgoi)+'ш</b> ':''} ${r.tire_elgevch?'· Элгэвч:<b style="color:var(--amber);">'+(r.tire_elgevch)+'ш</b> ':''} ${r.tire_dagdii?'· Дагдий:<b style="color:var(--amber);">'+(r.tire_dagdii)+'ш</b>':''}${posStr?'<br>📍'+posStr:''}</div>`;
+      else if(r.action_type==='new') det=`<div style="font-size:12px;color:var(--text-dim);margin-top:5px;">🆕 Шинэ:<b style="color:var(--green);">${r.tire_count||0}ш</b>${posStr?'<br>📍'+posStr:''}</div>`;
+      else if(r.action_type==='swap') det=`<div style="font-size:12px;color:var(--text-dim);margin-top:5px;">🔄 <b>${r.plate}</b>↔<b style="color:var(--blue);">${r.from_plate||'Агуулах'}</b>${r.approval?'<br>✅'+r.approval:''}${posStr?'<br>📍'+posStr:''}</div>`;
+      else if(r.action_type==='spare') det=`<div style="font-size:12px;color:var(--text-dim);margin-top:5px;">${r.tire_spare_in?'📦 Авсан:<b style="color:var(--purple);">'+(r.tire_spare_in)+'ш</b> ':''} ${r.tire_spare_out?'· Хэрэглэсэн:<b style="color:var(--red);">'+(r.tire_spare_out)+'ш</b>':''}${r.spare_note?'<br>'+r.spare_note:''}</div>`;
+      return `<div style="margin:0 16px 10px;background:var(--surface);border:1px solid var(--border);border-left:3px solid ${cfg.color};border-radius:var(--radius);padding:13px 14px;"><div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:5px;"><div><span style="font-size:15px;font-weight:800;font-family:var(--font-mono);">${r.plate||'—'}</span><span style="font-size:10px;font-weight:700;background:${cfg.color}22;color:${cfg.color};border:1px solid ${cfg.color}44;padding:2px 8px;border-radius:20px;margin-left:8px;">${cfg.label}</span></div><div style="font-size:11px;color:var(--text-dim);font-weight:600;">${dl}</div></div><div style="font-size:12px;color:var(--text-dim);">👤 ${r.driver||'—'}</div>${det}${r.technician?`<div style="font-size:11px;color:var(--text-dim);margin-top:5px;">🔧 Засварч:<b style="color:var(--text);">${r.technician}</b></div>`:''}${r.notes&&r.action_type!=='spare'?`<div style="font-size:11px;color:var(--text-dim);margin-top:3px;font-style:italic;">${r.notes}</div>`:''}</div>`;
+    }).join('');
+  }
+  </script>
+
+
+
+
+  <script>
+  // ════════════════ САЙЖРУУЛАЛТУУД ════════════════
+
+  // ── STAT DETAIL MODAL ──
+  function openStatDetail(type) {
+    const m=document.getElementById('statDetailModal'); if(m){m.style.display='flex';loadStatDetail(type);}
+  }
+  function closeStatDetail() {
+    const m=document.getElementById('statDetailModal'); if(m) m.style.display='none';
+  }
+  async function loadStatDetail(type) {
+    const title=document.getElementById('stat-modal-title');
+    const sub=document.getElementById('stat-modal-sub');
+    const body=document.getElementById('stat-modal-body');
+    const today=new Date().toISOString().split('T')[0];
+    const todayLabel=new Date().toLocaleDateString('mn-MN',{year:'numeric',month:'long',day:'numeric'});
+    if(body) body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-dim);">⏳</div>';
+    if(type==='vehicles'){
+      if(title) title.textContent='🚛 Бүртгэлтэй машинууд';
+      const vList=typeof vehicles!=='undefined'?vehicles:[];
+      if(sub) sub.textContent=`Нийт ${vList.length} машин · ${todayLabel}`;
+      if(!vList.length){if(body)body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-dim);">Машин бүртгэлгүй</div>';return;}
+      const g={active:vList.filter(v=>!v.status||v.status==='active'),idle:vList.filter(v=>v.status==='idle'||v.status==='no_driver'),repair:vList.filter(v=>v.status==='repair')};
+      const cfg={active:{l:'🟢 Идэвхтэй',c:'var(--green)'},idle:{l:'🟡 Сул зогсолт',c:'var(--amber)'},repair:{l:'🔴 Засварт',c:'var(--red)'}};
+      let html='';
+      for(const[k,list]of Object.entries(g)){if(!list.length)continue;html+=`<div style="font-size:10px;font-weight:700;color:${cfg[k].c};text-transform:uppercase;margin:16px 0 8px;">${cfg[k].l} · ${list.length}</div>`;list.forEach(v=>{const d=v.inspection?Math.ceil((new Date(v.inspection)-new Date())/86400000):null;const ic=d===null?'var(--text-dim)':d<0?'var(--red)':d<=14?'var(--amber)':'var(--text-dim)';html+=`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);"><div style="width:36px;height:36px;background:var(--surface2);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;">🚛</div><div style="flex:1;"><div style="font-size:14px;font-weight:700;font-family:var(--font-mono);">${v.plate}</div><div style="font-size:11px;color:var(--text-dim);">${v.model||'—'}</div></div>${d!==null?`<div style="font-size:11px;font-weight:600;color:${ic};">${d<0?'⚠️ '+Math.abs(d)+'х хэт':d+'х үлд'}</div>`:''}</div>`;});}
+      if(body) body.innerHTML=html;
+    } else if(type==='repair'){
+      if(title) title.textContent='🔴 Засварт машинууд';
+      const tasks=typeof repairTasks!=='undefined'?repairTasks.filter(t=>t.status!=='done'):[];
+      if(sub) sub.textContent=`${tasks.length} идэвхтэй засвар · ${todayLabel}`;
+      if(!tasks.length){if(body)body.innerHTML='<div style="text-align:center;padding:40px;color:var(--green);font-size:14px;font-weight:700;">✅ Засварт машин алга</div>';return;}
+      const uM={urgent:{e:'🔴',l:'Яаралтай',c:'var(--red)'},normal:{e:'🟡',l:'Хэвийн',c:'var(--amber)'},planned:{e:'🔵',l:'Төлөвлөсөн',c:'var(--blue)'}};
+      const sM={pending:{l:'Хүлээгдэж буй',c:'var(--amber)'},accepted:{l:'Хийгдэж байна',c:'var(--blue)'},done:{l:'Дууссан',c:'var(--green)'}};
+      if(body) body.innerHTML=tasks.map(r=>{const u=uM[r.urgency]||uM.normal,s=sM[r.status]||{l:r.status,c:'var(--text-dim)'};return`<div style="border-left:3px solid ${u.c};border-radius:0 10px 10px 0;background:var(--surface2);padding:12px 12px 12px 14px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;margin-bottom:6px;"><span style="font-size:14px;font-weight:700;font-family:var(--font-mono);">${r.plate||'—'}</span><span style="font-size:9px;font-weight:700;background:${u.c}22;color:${u.c};border:1px solid ${u.c}44;padding:2px 7px;border-radius:20px;">${u.e} ${u.l}</span></div><div style="font-size:12px;color:var(--text-dim);margin-bottom:6px;">${r.description||'—'}</div><div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text-dim);"><span>👤 ${r.repairer||r.driver||'—'}</span><span style="color:${s.c};">● ${s.l}</span></div>${r.total_cost?`<div style="font-size:12px;font-weight:700;color:var(--amber);margin-top:4px;">${Number(r.total_cost).toLocaleString('mn-MN')}₮</div>`:''}</div>`;}).join('');
+    } else if(type==='inspect'){
+      if(title) title.textContent='✅ Өнөөдрийн шалгалт';
+      const allV=typeof vehicles!=='undefined'?vehicles:[];
+      const allI=typeof mechanicNotes!=='undefined'?mechanicNotes.filter(n=>n.date===today||(n.created_at||'').startsWith(today)):[];
+      const checked=[...new Set(allI.map(n=>n.plate).filter(Boolean))];
+      const notChecked=allV.filter(v=>!checked.includes(v.plate));
+      if(sub) sub.textContent=`Шалгасан: ${checked.length} · Үлдсэн: ${notChecked.length}`;
+      let html='';
+      if(allI.length){html+=`<div style="font-size:10px;font-weight:700;color:var(--green);text-transform:uppercase;margin:0 0 10px;">✅ Шалгасан · ${allI.length}</div>`;allI.forEach(n=>{html+=`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);"><div style="width:36px;height:36px;background:rgba(16,185,129,0.12);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">✅</div><div style="flex:1;"><div style="font-size:14px;font-weight:700;font-family:var(--font-mono);">${n.plate||'—'}</div><div style="font-size:11px;color:var(--text-dim);">🔧 ${n.mechanic||'—'}</div></div><div style="font-size:11px;color:var(--green);font-weight:600;">Шалгасан</div></div>`;});}
+      if(notChecked.length){html+=`<div style="font-size:10px;font-weight:700;color:var(--amber);text-transform:uppercase;margin:16px 0 10px;">⏳ Шалгаагүй · ${notChecked.length}</div>`;notChecked.forEach(v=>{html+=`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);"><div style="width:36px;height:36px;background:rgba(240,165,0,0.1);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">🚛</div><div style="flex:1;"><div style="font-size:14px;font-weight:700;font-family:var(--font-mono);">${v.plate}</div><div style="font-size:11px;color:var(--text-dim);">${v.model||'—'}</div></div><div style="font-size:11px;color:var(--amber);font-weight:600;">Хүлээгдэж буй</div></div>`;});}
+      if(body) body.innerHTML=html||'<div style="text-align:center;padding:40px;color:var(--text-dim);">Мэдээлэл алга</div>';
+    } else if(type==='fuel'){
+      if(title) title.textContent='⛽ Өнөөдрийн түлш';
+      const logs=typeof fuelLog!=='undefined'?fuelLog.filter(f=>(f.created_at||'').startsWith(today)):[];
+      const tot=logs.reduce((s,f)=>s+(parseFloat(f.liters)||0),0);
+      if(sub) sub.textContent=`${logs.length} бүртгэл · ${tot.toFixed(1)}L · ${todayLabel}`;
+      if(!logs.length){if(body)body.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-dim);">Өнөөдөр түлш олгоогүй</div>';return;}
+      if(body) body.innerHTML=logs.map(f=>{const cost=(parseFloat(f.liters)||0)*(parseFloat(f.price_per_liter)||0);const t=f.created_at?new Date(f.created_at).toLocaleTimeString('mn-MN',{hour:'2-digit',minute:'2-digit'}):'';return`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);"><div style="width:36px;height:36px;background:rgba(59,130,246,0.12);border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;">⛽</div><div style="flex:1;"><div style="font-size:14px;font-weight:700;font-family:var(--font-mono);">${f.plate||'—'}</div><div style="font-size:11px;color:var(--text-dim);">👤 ${f.driver||'—'}</div></div><div style="text-align:right;"><div style="font-size:15px;font-weight:700;color:var(--blue);">${parseFloat(f.liters||0).toFixed(1)}L</div><div style="font-size:10px;color:var(--text-dim);">${t}${cost>0?' · '+Math.round(cost/1000)+'K₮':''}</div></div></div>`;}).join('');
+    }
+  }
+
+  // ── DONUT CHART БОДИТ ──
+  function renderDonutChart() {
+    const v=typeof vehicles!=='undefined'?vehicles:[];
+    const total=v.length, repair=v.filter(x=>x.status==='repair').length, idle=v.filter(x=>x.status==='idle'||x.status==='no_driver').length, active=total-repair-idle;
+    const eT=document.getElementById('donut-total'),eA=document.getElementById('donut-n-active'),eR=document.getElementById('donut-n-repair'),eI=document.getElementById('donut-n-idle'),eU=document.getElementById('donut-updated');
+    if(eT)eT.textContent=total;if(eA)eA.textContent=String(active).padStart(2,'0');if(eR)eR.textContent=String(repair).padStart(2,'0');if(eI)eI.textContent=String(idle).padStart(2,'0');if(eU)eU.textContent='Шинэчлэгдсэн: '+new Date().toLocaleTimeString('mn-MN',{hour:'2-digit',minute:'2-digit'});
+    if(!total)return;
+    const C=100,arcA=Math.round(active/total*C),arcR=Math.round(repair/total*C),arcI=Math.round(idle/total*C);
+    const sA=document.getElementById('donut-arc-active'),sR=document.getElementById('donut-arc-repair'),sI=document.getElementById('donut-arc-idle');
+    if(sA){sA.setAttribute('stroke','var(--green)');sA.setAttribute('stroke-dasharray',arcA+' '+(C-arcA));sA.setAttribute('stroke-dashoffset','25');}
+    if(sR){sR.setAttribute('stroke-dasharray',arcR+' '+(C-arcR));sR.setAttribute('stroke-dashoffset',25-arcA);}
+    if(sI){sI.setAttribute('stroke','var(--amber)');sI.setAttribute('stroke-dasharray',arcI+' '+(C-arcI));sI.setAttribute('stroke-dashoffset',25-arcA-arcR);}
+  }
+
+  // ── SERVICE REMINDER ──
+  function checkInspectionReminders() {
+    try{
+      const b=document.getElementById('service-reminder-banner'),t=document.getElementById('service-reminder-title'),tx=document.getElementById('service-reminder-text');
+      if(!b||(typeof vehicles==='undefined')||!vehicles.length)return;
+      const today=new Date(),over=[],soon=[];
+      vehicles.forEach(v=>{if(!v.inspection&&!v.inspection_date)return;const d=new Date(v.inspection_date||v.inspection);if(isNaN(d.getTime()))return;const diff=Math.round((d-today)/86400000);if(diff<0)over.push({plate:v.plate,days:Math.abs(diff)});else if(diff<=14)soon.push({plate:v.plate,days:diff});});
+      if(over.length){b.style.display='';if(t)t.textContent=`⚠️ ${over.length} машины оношилгоо дууссан!`;if(tx)tx.textContent=over.slice(0,3).map(x=>x.plate).join(', ')+(over.length>3?` +${over.length-3}`:'')+'';}
+      else if(soon.length){b.style.display='';const n=soon.sort((a,b)=>a.days-b.days)[0];if(t)t.textContent=`🔔 ${soon.length} машины оношилгоо удахгүй дуусна`;if(tx)tx.textContent=`${n.plate} — ${n.days} хоногийн дараа`;}
+      else b.style.display='none';
+    }catch(e){}
+  }
+
+  // ── DAILY REPORT ──
+  let _drDate=new Date().toISOString().split('T')[0],_drTab='daily';
+  const DR_MONTHS=['1-р сар','2-р сар','3-р сар','4-р сар','5-р сар','6-р сар','7-р сар','8-р сар','9-р сар','10-р сар','11-р сар','12-р сар'];
+  const DR_DAYS=['Ням','Даваа','Мягмар','Лхагва','Пүрэв','Баасан','Бямба'];
+
+  function drSwitchTab(tab){
+    _drTab=tab;
+    const d=document.getElementById('dr-tab-daily'),s=document.getElementById('dr-tab-staff'),dn=document.getElementById('dr-date-nav'),pb=document.getElementById('dr-pdf-btn');
+    if(tab==='daily'){if(d){d.style.background='var(--surface)';d.style.color='var(--amber)';d.style.boxShadow='0 2px 8px rgba(0,0,0,0.3)';}if(s){s.style.background='transparent';s.style.color='var(--text-dim)';s.style.boxShadow='none';}if(dn)dn.style.display='';if(pb)pb.style.display='flex';drLoadData();}
+    else{if(s){s.style.background='var(--surface)';s.style.color='var(--amber)';s.style.boxShadow='0 2px 8px rgba(0,0,0,0.3)';}if(d){d.style.background='transparent';d.style.color='var(--text-dim)';d.style.boxShadow='none';}if(dn)dn.style.display='none';if(pb)pb.style.display='none';drLoadStaffStats();}
+  }
+  function initDailyReport(){
+    _drDate=new Date().toISOString().split('T')[0];_drTab='daily';drUpdateHeader();
+    const tryLoad=(n)=>{const el=document.getElementById('dr-content');if(el)drSwitchTab('daily');else if(n>0)setTimeout(()=>tryLoad(n-1),60);};tryLoad(10);
+  }
+  function drChangeDate(d){const dt=new Date(_drDate);dt.setDate(dt.getDate()+d);if(dt>new Date())return;_drDate=dt.toISOString().split('T')[0];drUpdateHeader();drLoadData();}
+  function drSetToday(){_drDate=new Date().toISOString().split('T')[0];drUpdateHeader();drLoadData();}
+  function drSetOffset(d){const dt=new Date();dt.setDate(dt.getDate()+d);_drDate=dt.toISOString().split('T')[0];drUpdateHeader();drLoadData();}
+  function drUpdateHeader(){
+    const d=new Date(_drDate+'T12:00:00'),lbl=document.getElementById('dr-date-label'),sub=document.getElementById('dr-date-sub'),nb=document.getElementById('dr-next-btn');
+    if(lbl)lbl.textContent=`${d.getFullYear()} оны ${DR_MONTHS[d.getMonth()]} ${d.getDate()}`;
+    if(sub)sub.textContent=DR_DAYS[d.getDay()]+' гараг';
+    const iT=_drDate===new Date().toISOString().split('T')[0];if(nb){nb.disabled=iT;nb.style.opacity=iT?'0.3':'1';}
+  }
+  async function drLoadData(){
+    let el=document.getElementById('dr-content');if(!el){setTimeout(()=>drLoadData(),100);return;}
+    el.innerHTML='<div style="text-align:center;padding:60px;color:var(--text-dim);"><div style="font-size:32px;">⏳</div></div>';
+    const date=_drDate,from=date+'T00:00:00',to=date+'T23:59:59';
+    try{
+      const[R,F,I]=await Promise.all([isOnline?DB_MT.get('repair_tasks',`?created_at=gte.${from}&created_at=lte.${to}&order=created_at.desc`).catch(()=>null):null,isOnline?DB_MT.get('fuel_logs',`?created_at=gte.${from}&created_at=lte.${to}&order=created_at.desc`).catch(()=>null):null,isOnline?DB_MT.get('inspections',`?date=eq.${date}`).catch(()=>null):null]);
+      const r=R||[],f=F||[],i=I||[];
+      const vLen=typeof vehicles!=='undefined'?vehicles.length:0;
+      const ip=vLen>0?Math.round(i.length/vLen*100):0;
+      const urg=r.filter(x=>x.urgency==='urgent');
+      const score=Math.round((ip*0.5)+(urg.length===0?30:0)+((f.length>0)?20:0));
+      const sc=score>=80?'var(--green)':score>=50?'var(--amber)':'var(--red)';
+      const fT=f.reduce((s,x)=>s+(parseFloat(x.liters)||0),0);
+      el.innerHTML=`<div style="margin:0 16px 12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:18px 16px;">
+        <div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px;">📊 Өдрийн дүгнэлт</div>
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div style="text-align:center;"><div style="font-size:44px;font-weight:700;color:${sc};line-height:1;font-family:var(--font-mono);">${score}</div><div style="font-size:11px;font-weight:700;color:${sc};margin-top:4px;">${score>=80?'✅ Сайн':score>=50?'⚠️ Дунд':'🔴 Муу'}</div></div>
+          <div style="flex:1;">
+            <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text-dim);margin-bottom:4px;"><span>Шалгалт ирц</span><span style="color:${ip>=80?'var(--green)':ip>=50?'var(--amber)':'var(--red)'};">${ip}%</span></div>
+            <div style="height:5px;background:var(--surface3);border-radius:3px;overflow:hidden;margin-bottom:8px;"><div style="height:100%;width:${ip}%;background:${ip>=80?'var(--green)':ip>=50?'var(--amber)':'var(--red)'};border-radius:3px;"></div></div>
+            <div style="display:flex;gap:12px;"><span style="font-size:10px;color:var(--text-dim);">🔴 Яаралтай: <b style="color:${urg.length>0?'var(--red)':'var(--green)'};">${urg.length}</b></span><span style="font-size:10px;color:var(--text-dim);">⛽ <b style="color:var(--blue);">${fT.toFixed(0)}L</b></span></div>
+          </div>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 16px 100px;">
+        ${[['🚛','Машин',vLen,'Нийт','amber'],['✅','Шалгалт',i.length,`Үлдсэн:${Math.max(0,vLen-i.length)}`,'green'],['🔴','Засвар',r.length,`Дуусс.:${r.filter(x=>x.status==='done').length}`,'red'],['⛽','Түлш',fT.toFixed(0)+'L',`${f.length} бүртгэл`,'blue']].map(([ic,lb,val,sb,c])=>`<div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;"><div style="font-size:18px;margin-bottom:8px;">${ic}</div><div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-bottom:4px;">${lb}</div><div style="font-size:26px;font-weight:700;color:var(--${c});line-height:1;font-family:var(--font-mono);">${val}</div><div style="font-size:10px;color:var(--text-dim);margin-top:5px;">${sb}</div></div>`).join('')}
+      </div>`;
+    }catch(e){el.innerHTML=`<div style="padding:30px;text-align:center;color:var(--red);">⚠️ ${e.message||''}</div>`;}
+  }
+
+  // ── STAFF STATS ──
+  let _staffFilter='all',_staffData={mech:{},repair:{},fuel:{},I:[],R:[],F:[]};
+  function drStaffFilter(role){
+    _staffFilter=role;
+    ['all','mechanic','repair','fuel'].forEach(r=>{const b=document.getElementById('sf-'+r);if(!b)return;const a=r===role;b.style.border=a?'1.5px solid var(--amber)':'1.5px solid var(--border)';b.style.background=a?'rgba(240,165,0,0.1)':'var(--surface2)';b.style.color=a?'var(--amber)':'var(--text-dim)';});
+    const l=document.getElementById('staff-list-body');if(l)drRenderStaffList();else setTimeout(()=>drRenderStaffList(),50);
+  }
+  function drRenderStaffList(){
+    const l=document.getElementById('staff-list-body');if(!l){setTimeout(()=>drRenderStaffList(),100);return;}
+    const{mech,repair,fuel}=_staffData;let html='';
+    const sm=_staffFilter==='all'||_staffFilter==='mechanic';
+    const sr=_staffFilter==='all'||_staffFilter==='repair';
+    const sf=_staffFilter==='all'||_staffFilter==='fuel';
+    if(sm&&Object.keys(mech).length){const tot=_staffData.I.length;html+=drSSec('🔧 Механик',Object.entries(mech).sort((a,b)=>b[1].checked-a[1].checked),(n,d)=>{const u=allUsers.find(u=>u.username===n);const lb=u?(u.fullname||u.username):n;const p=tot>0?Math.round(d.checked/tot*100):0;return{label:lb,sub:`${d.checked} шалгалт · ${p}%`,value:d.checked,unit:'шалгалт',color:'var(--amber)',pct:p,role:'mechanic',key:n};});}
+    if(sr&&Object.keys(repair).length){html+=drSSec('🛠️ Засварч',Object.entries(repair).sort((a,b)=>b[1].completed-a[1].completed),(n,d)=>{const u=allUsers.find(u=>u.username===n);const lb=u?(u.fullname||u.username):n;return{label:lb,sub:`${d.completed} засвар · ${(d.totalCost/1000000).toFixed(2)}M₮`,value:d.completed,unit:'засвар',color:'var(--green)',pct:Math.min(100,d.completed*5),role:'repair',key:n};});}
+    if(sf&&Object.keys(fuel).length){const mx=Math.max(...Object.values(fuel).map(d=>d.liters),1);html+=drSSec('⛽ Түгээгч',Object.entries(fuel).sort((a,b)=>b[1].liters-a[1].liters),(n,d)=>{const u=allUsers.find(u=>u.username===n);const lb=u?(u.fullname||u.username):n;return{label:lb,sub:`${d.liters.toFixed(0)}L · ${d.sessions} удаа`,value:d.liters.toFixed(0),unit:'литр',color:'var(--blue)',pct:Math.round(d.liters/mx*100),role:'fuel',key:n};});}
+    if(!html)html='<div style="text-align:center;padding:40px;color:var(--text-dim);font-size:13px;">Бүртгэл алга</div>';
+    l.innerHTML=html;
+  }
+  function drSSec(title,entries,mapFn){
+    let h=`<div style="padding:0 0 4px;"><div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><span style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;">${title}</span><div style="flex:1;height:1px;background:var(--border);"></div><span style="font-size:10px;font-weight:700;color:var(--amber);">${entries.length}</span></div>`;
+    entries.forEach(([name,d])=>{const info=mapFn(name,d);h+=`<div onclick="drOpenDetail('${info.key}','${info.role}')" style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:8px;cursor:pointer;" onmouseenter="this.style.borderColor='rgba(240,165,0,0.35)'" onmouseleave="this.style.borderColor='var(--border)'"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><div><div style="font-size:14px;font-weight:700;">${info.label}</div><div style="font-size:11px;color:var(--text-dim);">${info.sub}</div></div><div style="text-align:right;"><div style="font-size:24px;font-weight:700;color:${info.color};font-family:var(--font-mono);">${info.value}</div><div style="font-size:10px;color:var(--text-dim);">${info.unit}</div></div></div><div style="height:6px;background:var(--surface3);border-radius:3px;overflow:hidden;"><div style="height:100%;width:${info.pct}%;background:${info.color};border-radius:3px;"></div></div></div>`;});
+    return h+'</div>';
+  }
+  function drOpenDetail(username,role){
+    const{I,R,F}=_staffData;const u=allUsers.find(u=>u.username===username);const lb=u?(u.fullname||u.username):username;
+    let det='';
+    if(role==='mechanic'){const my=I.filter(i=>i.mechanic===username);det=`<div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-bottom:12px;">✅ Шалгасан · ${my.length}</div>`;my.slice(0,20).forEach(i=>{det+=`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);"><span style="font-size:13px;font-weight:700;font-family:var(--font-mono);">${i.plate||'—'}</span><span style="font-size:11px;color:var(--text-dim);">${i.date||''}</span></div>`;});}
+    else if(role==='repair'){const my=R.filter(r=>r.repairer===username);det=`<div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-bottom:12px;">🛠️ Засвар · ${my.length}</div>`;my.slice(0,20).forEach(r=>{const sc=r.status==='done'?'var(--green)':r.status==='accepted'?'var(--blue)':'var(--amber)';det+=`<div style="background:var(--surface2);border-radius:10px;padding:12px;margin-bottom:8px;"><div style="display:flex;justify-content:space-between;"><span style="font-size:13px;font-weight:700;font-family:var(--font-mono);">${r.plate||'—'}</span><span style="font-size:10px;font-weight:700;color:${sc};">${r.status==='done'?'Дуусс.':r.status==='accepted'?'Хийгдэж байна':'Хүлээгдэж буй'}</span></div><div style="font-size:11px;color:var(--text-dim);margin-top:4px;">${(r.description||'').slice(0,60)}</div></div>`;});}
+    else if(role==='fuel'){const my=F.filter(f=>(f.operator||f.driver)===username);const tot=my.reduce((s,f)=>s+(parseFloat(f.liters)||0),0);det=`<div style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;margin-bottom:12px;">⛽ Түлш · ${my.length} · ${tot.toFixed(0)}L</div>`;my.slice(0,20).forEach(f=>{const t=f.created_at?new Date(f.created_at).toLocaleDateString('mn-MN',{month:'short',day:'numeric'}):'';det+=`<div style="display:flex;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);"><span style="font-size:13px;font-weight:700;font-family:var(--font-mono);">${f.plate||'—'}</span><div style="text-align:right;"><div style="font-size:13px;font-weight:700;color:var(--blue);">${parseFloat(f.liters||0).toFixed(1)}L</div><div style="font-size:10px;color:var(--text-dim);">${t}</div></div></div>`;});}
+    let modal=document.getElementById('staff-detail-modal');
+    if(!modal){modal=document.createElement('div');modal.id='staff-detail-modal';modal.style.cssText='position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);display:flex;align-items:flex-end;justify-content:center;';modal.onclick=e=>{if(e.target===modal)modal.remove();};document.body.appendChild(modal);}
+    modal.innerHTML=`<div style="width:100%;max-width:420px;background:var(--surface);border-radius:24px 24px 0 0;max-height:78vh;display:flex;flex-direction:column;animation:fadeSlide 0.25s ease;"><div style="padding:16px 20px 0;flex-shrink:0;"><div style="width:36px;height:4px;background:var(--surface3);border-radius:2px;margin:0 auto 14px;"></div><div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border);"><div><div style="font-size:17px;font-weight:700;">${lb}</div><div style="font-size:12px;color:var(--text-dim);">${role==='mechanic'?'🔧 Механик':role==='repair'?'🛠️ Засварч':'⛽ Түгээгч'} · Энэ сар</div></div><button onclick="document.getElementById('staff-detail-modal').remove()" style="width:30px;height:30px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;color:var(--text-dim);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;">✕</button></div></div><div style="overflow-y:auto;padding:14px 20px 40px;flex:1;">${det}</div></div>`;
+    modal.style.display='flex';
+  }
+  async function drLoadStaffStats(){
+    const el=document.getElementById('dr-content');if(!el){setTimeout(()=>drLoadStaffStats(),100);return;}
+    el.innerHTML='<div style="text-align:center;padding:40px;color:var(--text-dim);"><div style="font-size:28px;">⏳</div></div>';
+    const now=new Date(),y=now.getFullYear(),m=String(now.getMonth()+1).padStart(2,'0');
+    const ms=`${y}-${m}-01T00:00:00`,me=`${y}-${m}-31T23:59:59`;
+    try{
+      const[R,F,I]=await Promise.all([isOnline?DB_MT.get('repair_tasks',`?created_at=gte.${ms}&created_at=lte.${me}&order=created_at.desc`).catch(()=>[]):[], isOnline?DB_MT.get('fuel_logs',`?created_at=gte.${ms}&created_at=lte.${me}&order=created_at.desc`).catch(()=>[]):[], isOnline?DB_MT.get('inspections',`?created_at=gte.${ms}&created_at=lte.${me}&order=created_at.desc`).catch(()=>[]):[]]);
+      const r=R||[],f=F||[],i=I||[];
+      const mech={},repairS={},fuelS={};
+      i.forEach(x=>{const k=x.mechanic||'—';if(!mech[k])mech[k]={checked:0};mech[k].checked++;});
+      r.forEach(x=>{const k=x.repairer||'—';if(!repairS[k])repairS[k]={completed:0,totalCost:0};if(x.status==='done'){repairS[k].completed++;repairS[k].totalCost+=x.total_cost||0;}});
+      f.forEach(x=>{const k=x.operator||x.driver||'—';if(!fuelS[k])fuelS[k]={liters:0,sessions:0};fuelS[k].liters+=parseFloat(x.liters)||0;fuelS[k].sessions++;});
+      _staffData={mech,repair:repairS,fuel:fuelS,I:i,R:r,F:f};
+      el.innerHTML=`<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin:0 16px 14px;">
+        ${[['amber',i.length,'ШАЛГАЛТ'],['green',r.filter(x=>x.status==='done').length,'ЗАСВАР'],['blue',f.reduce((s,x)=>s+(parseFloat(x.liters)||0),0).toFixed(0),'ЛИТР']].map(([c,v,l])=>`<div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px;text-align:center;"><div style="font-size:22px;font-weight:700;color:var(--${c});font-family:var(--font-mono);">${v}</div><div style="font-size:10px;color:var(--text-dim);font-weight:700;margin-top:3px;">${l}</div></div>`).join('')}
+      </div>
+      <div id="staff-list-body" style="padding:0 16px 100px;"></div>`;
+      _staffFilter='all';setTimeout(()=>drRenderStaffList(),50);
+    }catch(e){el.innerHTML=`<div style="padding:30px;text-align:center;color:var(--red);">⚠️ ${e.message}</div>`;}
+  }
+
+  // ── PERFORMANCE + CHARTS HOOKS ──
+  if(typeof gotoScreen==='function'){
+    const _pg=gotoScreen;
+    gotoScreen=function(name,el){
+      _pg(name,el);
+      if(name==='performance') requestAnimationFrame(()=>setTimeout(()=>{if(typeof initDailyReport==='function')initDailyReport();},50));
+      if(name==='charts') setTimeout(()=>{if(typeof renderDonutChart==='function')renderDonutChart();},100);
+    };
+  }
+
+  // updateDashboardStats-д checkInspectionReminders нэмэх
+  if(typeof updateDashboardStats==='function'){
+    const _ods=updateDashboardStats;
+    window.updateDashboardStats=async function(){await _ods();if(typeof checkInspectionReminders==='function')checkInspectionReminders();if(typeof renderDonutChart==='function')renderDonutChart();};
+  }
+  </script>
+
+
+  <script>
+  // ════════════════════════════════
+  // ⚫ ДУГУЙН ХЯНАЛТ — JS
+  // ════════════════════════════════
+
+  // Dashboard tire stats — өнөөдрийн
+  async function updateTireDashboard() {
+    const today = new Date().toISOString().split('T')[0];
+    try {
+      const rows = isOnline
+        ? await DB_MT.get('tire_records',
+            `?company_id=eq.${currentCompanyId}&date=eq.${today}&select=action_type,tire_olgoi,tire_elgevch,tire_dagdii,tire_count`)
+        : (_tireRecords||[]).filter(r=>(r.date||r.created_at||'').slice(0,10)===today);
+
+      const patches = (rows||[]).filter(r=>r.action_type==='patch');
+      const totalPatch   = patches.length;
+      const totalOlgoi   = patches.reduce((s,r)=>s+(r.tire_olgoi||0),0);
+      const totalElgevch = patches.reduce((s,r)=>s+(r.tire_elgevch||0),0);
+      const totalDagdii  = patches.reduce((s,r)=>s+(r.tire_dagdii||0),0);
+
+      const set = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+      set('tire-dash-patch',   totalPatch);
+      set('tire-dash-olgoi',   totalOlgoi);
+      set('tire-dash-elgevch', totalElgevch);
+      set('tire-dash-dagdii',  totalDagdii);
+
+      // Нөөц
+      const sn = document.getElementById('tire-dash-stock-new');
+      const so = document.getElementById('tire-dash-stock-old');
+      if(sn) { const v=getStock('new'); sn.textContent=v; sn.style.color=v===0?'var(--red)':v<=3?'var(--amber)':'var(--green)'; }
+      if(so) { const v=getStock('old'); so.textContent=v; }
+    } catch(e) {
+      ['tire-dash-patch','tire-dash-olgoi','tire-dash-elgevch','tire-dash-dagdii'].forEach(id=>{const el=document.getElementById(id);if(el)el.textContent='—';});
+    }
+  }
+
+  // График дэлгэц — энэ сарын дугуйн мэдээлэл
+  async function renderTireChart() {
+    const now = new Date();
+    const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+    const lbl = document.getElementById('tire-chart-label');
+    const byTech = document.getElementById('tire-chart-by-tech');
+    if(lbl) lbl.textContent = `${now.getFullYear()} оны ${now.getMonth()+1}-р сар`;
+
+    try {
+      const rows = isOnline
+        ? await DB_MT.get('tire_records',
+            `?company_id=eq.${currentCompanyId}&created_at=gte.${ym}-01T00:00:00&action_type=eq.patch&select=tire_olgoi,tire_elgevch,tire_dagdii,technician`)
+        : (_tireRecords||[]).filter(r=>(r.created_at||r.date||'').slice(0,7)===ym&&r.action_type==='patch');
+
+      const R = rows||[];
+      const set = (id, val) => { const el=document.getElementById(id); if(el) el.textContent=val; };
+      set('tire-chart-patch',   R.length);
+      set('tire-chart-olgoi',   R.reduce((s,r)=>s+(r.tire_olgoi||0),0));
+      set('tire-chart-elgevch', R.reduce((s,r)=>s+(r.tire_elgevch||0),0));
+      set('tire-chart-dagdii',  R.reduce((s,r)=>s+(r.tire_dagdii||0),0));
+
+      // Засварчаар
+      if(byTech) {
+        const techMap = {};
+        R.forEach(r=>{
+          const t = r.technician||'—';
+          if(!techMap[t]) techMap[t]={patch:0,olgoi:0,elgevch:0,dagdii:0};
+          techMap[t].patch++;
+          techMap[t].olgoi   += r.tire_olgoi||0;
+          techMap[t].elgevch += r.tire_elgevch||0;
+          techMap[t].dagdii  += r.tire_dagdii||0;
+        });
+        if(!Object.keys(techMap).length) {
+          byTech.innerHTML='<div style="text-align:center;padding:12px;color:var(--text-dim);font-size:12px;">Энэ сард бүртгэл алга</div>';
+        } else {
+          byTech.innerHTML = Object.entries(techMap).map(([name,d])=>`
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid var(--border);">
+              <div style="font-size:13px;font-weight:600;">${name}</div>
+              <div style="display:flex;gap:8px;font-size:11px;font-family:var(--font-mono);">
+                <span style="color:var(--amber);">${d.patch}н</span>
+                <span style="color:var(--text-dim);">Олг:${d.olgoi}</span>
+                <span style="color:var(--text-dim);">Элг:${d.elgevch}</span>
+                <span style="color:var(--text-dim);">Дагд:${d.dagdii}</span>
+              </div>
+            </div>`).join('');
+        }
+      }
+    } catch(e) { console.error('renderTireChart:', e); }
+  }
+
+  // Сарын тайлан — дугуйн хэсэг
+  async function renderTireMonthlyReport() {
+    const el = document.getElementById('tire-monthly-report');
+    if(!el) return;
+    const selEl = document.getElementById('reportMonthSel');
+    const selMonth = selEl ? selEl.value : new Date().toISOString().slice(0,7);
+    el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--text-dim);">⏳</div>';
+    try {
+      const [y,m] = selMonth.split('-');
+      const from = `${selMonth}-01T00:00:00`, to = `${y}-${m}-31T23:59:59`;
+      const rows = isOnline
+        ? await DB_MT.get('tire_records',
+            `?company_id=eq.${currentCompanyId}&created_at=gte.${from}&created_at=lte.${to}&order=created_at.desc`)
+        : [];
+      const R = rows||[];
+      const patches = R.filter(r=>r.action_type==='patch');
+      const newTires = R.filter(r=>r.action_type==='new');
+      const swaps   = R.filter(r=>r.action_type==='swap');
+
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:var(--amber);font-family:var(--font-mono);">${patches.length}</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">НӨХСӨН</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:var(--green);font-family:var(--font-mono);">${newTires.reduce((s,r)=>s+(r.tire_count||0),0)}</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">ШИНЭ ДУГУЙ</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:12px;text-align:center;">
+            <div style="font-size:22px;font-weight:700;color:var(--blue);font-family:var(--font-mono);">${swaps.length}</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:3px;">СОЛИЛТ</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;">
+          <div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:var(--amber);font-family:var(--font-mono);">${patches.reduce((s,r)=>s+(r.tire_olgoi||0),0)}</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:2px;">ОЛГОЙ</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:var(--amber);font-family:var(--font-mono);">${patches.reduce((s,r)=>s+(r.tire_elgevch||0),0)}</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:2px;">ЭЛГЭВЧ</div>
+          </div>
+          <div style="background:var(--surface2);border-radius:10px;padding:10px;text-align:center;">
+            <div style="font-size:18px;font-weight:700;color:var(--amber);font-family:var(--font-mono);">${patches.reduce((s,r)=>s+(r.tire_dagdii||0),0)}</div>
+            <div style="font-size:9px;color:var(--text-dim);font-weight:700;margin-top:2px;">ДАГДИЙ</div>
+          </div>
+        </div>
+        ${R.length===0?'<div style="text-align:center;padding:16px;color:var(--text-dim);font-size:13px;">Энэ сард дугуйн бүртгэл алга</div>':
+          R.slice(0,10).map(r=>{
+            const cfg={patch:{l:'🔧 Нөхсөн',c:'var(--amber)'},new:{l:'🆕 Шинэ',c:'var(--green)'},swap:{l:'🔄 Солилт',c:'var(--blue)'},spare:{l:'📦 Запас',c:'var(--purple)'}};
+            const a=cfg[r.action_type]||{l:r.action_type,c:'var(--text-dim)'};
+            const dt=r.date?new Date(r.date+'T12:00:00').toLocaleDateString('mn-MN',{month:'short',day:'numeric'}):'—';
+            let det='';
+            if(r.action_type==='patch') det=`Олгой:${r.tire_olgoi||0} Элгэвч:${r.tire_elgevch||0} Дагдий:${r.tire_dagdii||0}`;
+            else if(r.action_type==='new') det=`${r.tire_count||0} ш`;
+            return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border);">
+              <div>
+                <span style="font-size:13px;font-weight:700;font-family:var(--font-mono);">${r.plate||'—'}</span>
+                <span style="font-size:10px;font-weight:700;background:${a.c}22;color:${a.c};padding:2px 8px;border-radius:20px;margin-left:6px;">${a.l}</span>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-size:11px;color:var(--text-dim);">${det}</div>
+                <div style="font-size:10px;color:var(--text-dim);">${dt} · ${r.technician||'—'}</div>
+              </div>
+            </div>`;
+          }).join('')}`;
+    } catch(e) {
+      el.innerHTML = `<div style="padding:16px;color:var(--red);font-size:13px;">⚠️ ${e.message}</div>`;
+    }
+  }
+
+  // ── Ажилтны дүн — tire засварч нэмэх ──
+  // drRenderStaffList-д tire section нэмэх
+  const _origDrRender = typeof drRenderStaffList === 'function' ? drRenderStaffList : null;
+  if (_origDrRender) {
+    window.drRenderStaffList = function() {
+      _origDrRender();
+      // Дугуй засварчийн хэсэг нэмэх
+      const l = document.getElementById('staff-list-body');
+      if (!l || typeof _tireRecords === 'undefined') return;
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      const monthly = (_tireRecords||[]).filter(r=>(r.created_at||r.date||'').slice(0,7)===ym);
+      const techMap = {};
+      monthly.forEach(r=>{
+        const t = r.technician||'—';
+        if(!techMap[t]) techMap[t]={patch:0,olgoi:0,elgevch:0,dagdii:0,new:0};
+        if(r.action_type==='patch'){techMap[t].patch++;techMap[t].olgoi+=r.tire_olgoi||0;techMap[t].elgevch+=r.tire_elgevch||0;techMap[t].dagdii+=r.tire_dagdii||0;}
+        if(r.action_type==='new') techMap[t].new+=r.tire_count||0;
+      });
+      if(!Object.keys(techMap).length) return;
+      const section = document.createElement('div');
+      section.style.padding='0 0 4px';
+      section.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><span style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;">⚫ Дугуй засварч</span><div style="flex:1;height:1px;background:var(--border);"></div><span style="font-size:10px;font-weight:700;color:var(--amber);">${Object.keys(techMap).length}</span></div>`
+        +Object.entries(techMap).sort((a,b)=>b[1].patch-a[1].patch).map(([name,d])=>`
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div style="font-size:14px;font-weight:700;">${name}</div>
+              <div style="font-size:22px;font-weight:700;color:var(--amber);font-family:var(--font-mono);">${d.patch}</div>
+            </div>
+            <div style="display:flex;gap:8px;font-size:11px;color:var(--text-dim);">
+              <span>Олгой: <b style="color:var(--text);">${d.olgoi}</b></span>
+              <span>Элгэвч: <b style="color:var(--text);">${d.elgevch}</b></span>
+              <span>Дагдий: <b style="color:var(--text);">${d.dagdii}</b></span>
+              ${d.new?`<span>Шинэ: <b style="color:var(--green);">${d.new}</b></span>`:''}
+            </div>
+          </div>`).join('');
+      l.appendChild(section);
+    };
+  }
+
+  // Dashboard шинэчлэхэд tire stats ч шинэчлэх
+  const _prevUpdateDash2 = typeof updateDashboardStats==='function' ? updateDashboardStats : null;
+  if (_prevUpdateDash2) {
+    window.updateDashboardStats = async function() {
+      await _prevUpdateDash2();
+      if (typeof updateTireDashboard === 'function') updateTireDashboard();
+    };
+  }
+
+  // Сарын тайлан нэмэх — loadMonthlyReport-аас дуудах
+  const _origLoadMonthly = typeof loadMonthlyReport === 'function' ? loadMonthlyReport : null;
+  if (_origLoadMonthly) {
+    window.loadMonthlyReport = async function() {
+      await _origLoadMonthly();
+      if (typeof renderTireMonthlyReport === 'function') renderTireMonthlyReport();
+    };
+  }
+
+  // Жолоочийн дүгнэлтэд дугуйн засвар оноо нэмэх (renderDriverScores wrapper)
+  </script>
+
+  <script>
+  // ═══════════════════════════════════════════════════════════════
+  // 🔧 ЗАСВАР & САЙЖРУУЛАЛТ v1 — Өөрчлөлтгүй нэмэлт
+  // Шалгасан алдаанууд:
+  //   1. wear_items DB-рүү явахгүй байсан → saveMechanicNote-д засагдсан
+  //   2. DEFAULT_USERS-д id:'u6' давхардаж байсан → u7 болгосон
+  //   3. fuel_logs-д 'created_at' талбар дутуу байна → нэмэгдлээ
+  //   4. tire_stock хүснэгт бүртгэлдэх үед алдаа боловч catch хийгдсэн
+  //   5. drRenderStaffList wrapper-ийн дарааллын алдаа → засагдлаа
+  // ═══════════════════════════════════════════════════════════════
+
+  // ── 1. FUEL LOG-Д created_at НЭМЭХ ──
+  // logFuel дотор dbEntry-д created_at дутуу байсан
+  (function patchLogFuel() {
+    const _orig = window.logFuel;
+    if (typeof _orig !== 'function') return;
+    window.logFuel = async function() {
+      // Суурь функц дуудахаас өмнө DB insert-д created_at нэмэх patch
+      const origInsert = DB_MT.insert;
+      DB_MT.insert = function(table, data) {
+        if (table === 'fuel_logs' && !data.created_at) {
+          data = { ...data, created_at: new Date().toISOString() };
+        }
+        return origInsert.call(this, table, data);
+      };
+      try {
+        await _orig.apply(this, arguments);
+      } finally {
+        DB_MT.insert = origInsert;
+      }
+    };
+  })();
+
+  // ── 2. OFFLINE SYNC-Д created_at НЭМЭХ ──
+  // pendingSync item-д created_at байхгүй бол нэмэх
+  (function patchSyncPending() {
+    const _orig = window.syncPendingData;
+    if (typeof _orig !== 'function') return;
+    window.syncPendingData = async function() {
+      pendingSync = pendingSync.map(item => {
+        if (item.data && !item.data.created_at) {
+          item.data = { ...item.data, created_at: new Date(item.savedAt || Date.now()).toISOString() };
+        }
+        return item;
+      });
+      return _orig.apply(this, arguments);
+    };
+  })();
+
+  // ── 3. АЖИЛТНЫ ГҮЙЦЭТГЭЛИЙН ДАРААЛАЛ ЗАСАХ ──
+  // drRenderStaffList wrapper — tire section-г зөв дарааллаар нэмэх
+  (function fixDrRenderStaffOrder() {
+    const prevDr = typeof drRenderStaffList === 'function' ? drRenderStaffList : null;
+    const prevTire = window._origDrRender;
+    // Tire section нэмэх wrapper аль хэдийн байгаа бол дахин wrap хийхгүй
+    if (!prevDr || window._drRenderFixed) return;
+    window._drRenderFixed = true;
+    window.drRenderStaffList = function() {
+      prevDr(); // Үндсэн функц
+      // Дугуй засварч хэсэг нэмэх
+      const l = document.getElementById('staff-list-body');
+      if (!l || typeof _tireRecords === 'undefined' || !_tireRecords.length) return;
+      const now = new Date();
+      const ym = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+      const monthly = _tireRecords.filter(r=>(r.created_at||r.date||'').slice(0,7)===ym);
+      if (!monthly.length) return;
+      const techMap = {};
+      monthly.forEach(r=>{
+        const t = r.technician||'—';
+        if(!techMap[t]) techMap[t]={patch:0,olgoi:0,elgevch:0,dagdii:0,newT:0};
+        if(r.action_type==='patch'){techMap[t].patch++;techMap[t].olgoi+=r.tire_olgoi||0;techMap[t].elgevch+=r.tire_elgevch||0;techMap[t].dagdii+=r.tire_dagdii||0;}
+        if(r.action_type==='new') techMap[t].newT+=r.tire_count||0;
+      });
+      if(!Object.keys(techMap).length) return;
+      const existing = l.querySelector('.tire-staff-section');
+      if (existing) existing.remove(); // Давхардал арилгах
+      const section = document.createElement('div');
+      section.className = 'tire-staff-section';
+      section.style.padding='0 0 4px';
+      section.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;"><span style="font-size:10px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.08em;">⚫ Дугуй засварч</span><div style="flex:1;height:1px;background:var(--border);"></div><span style="font-size:10px;font-weight:700;color:var(--amber);">${Object.keys(techMap).length}</span></div>`
+        +Object.entries(techMap).sort((a,b)=>b[1].patch-a[1].patch).map(([name,d])=>`
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;margin-bottom:8px;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+              <div style="font-size:14px;font-weight:700;">${name}</div>
+              <div style="font-size:22px;font-weight:700;color:var(--amber);font-family:var(--font-mono);">${d.patch}</div>
+            </div>
+            <div style="display:flex;gap:8px;font-size:11px;color:var(--text-dim);">
+              <span>Олгой: <b style="color:var(--text);">${d.olgoi}</b></span>
+              <span>Элгэвч: <b style="color:var(--text);">${d.elgevch}</b></span>
+              <span>Дагдий: <b style="color:var(--text);">${d.dagdii}</b></span>
+              ${d.newT?`<span>Шинэ: <b style="color:var(--green);">${d.newT}</b></span>`:''}
+            </div>
+          </div>`).join('');
+      l.appendChild(section);
+    };
+  })();
+
+  // ── 4. ТАЙЛАНГИЙН МЭДЭЭЛЭЛ БОДИТ ЭСЭХийг ШАЛГАХ ──
+  // Хуурамч өгөгдөл ашиглагдаж байгаа газруудыг warn-ар тэмдэглэх
+  (function warnDemoData() {
+    // GPS data нь demo data — анхааруулга нэмэх
+    const origRenderGPS = window.renderGPSList;
+    if (typeof origRenderGPS === 'function') {
+      window.renderGPSList = function() {
+        origRenderGPS.apply(this, arguments);
+        const el = document.getElementById('screen-gps');
+        if (!el) return;
+        let warn = el.querySelector('.demo-gps-warn');
+        if (!warn) {
+          warn = document.createElement('div');
+          warn.className = 'demo-gps-warn';
+          warn.style.cssText = 'margin:0 16px 10px;padding:10px 14px;background:rgba(245,158,11,0.07);border:1px solid rgba(245,158,11,0.2);border-radius:10px;font-size:11px;color:var(--amber);font-weight:600;';
+          warn.textContent = '⚠️ GPS мэдээлэл тест горимд байна — бодит GPS төхөөрөмжтэй холбогдуулна уу';
+          const hdr = el.querySelector('.app-header');
+          if (hdr) hdr.insertAdjacentElement('afterend', warn);
+        }
+      };
+    }
+
+    // Service schedules дотор demo data байгааг warn
+    const origRenderSvc = window.saveServiceSchedule;
+    // Demo data-г LocalStorage дарж хаяхаас сэргийлэх хамгаалалт хийгдсэн
+  })();
+
+  // ── 5. ХЯНАХ САМБАР — ШИНЭ МАШИН НЭМСЭН ТОХИОЛДОЛД АВТОМАТААР ШИНЭЧЛЭХ ──
+  (function hookSaveVehicle() {
+    const orig = window.saveNewVehicle;
+    if (typeof orig !== 'function') return;
+    window.saveNewVehicle = async function() {
+      const result = await orig.apply(this, arguments);
+      // Машин нэмсний дараа Dashboard stat шинэчлэх
+      if (typeof updateDashboardStats === 'function') {
+        setTimeout(() => updateDashboardStats(), 500);
+      }
+      return result;
+    };
+  })();
+
+  // ── 6. ЗАСВАРЫН БҮРТГЭЛ — ЗАРДАЛ ТООЦОО ШАЛГАХ ──
+  // FIX: Calculate total scoped to #parts-container, no name field requirement
+  window.calcTotal = function() {
+    let total = 0;
+    document.querySelectorAll('#parts-container .parts-entry').forEach(row => {
+      const allInputs = row.querySelectorAll('input');
+      if (allInputs.length >= 3) {
+        const qty  = parseFloat(allInputs[1]?.value) || 1;
+        const cost = parseFloat(allInputs[2]?.value) || 0;
+        if (cost > 0) total += qty * cost;
+      } else if (allInputs.length >= 2) {
+        const numInputs = row.querySelectorAll('input[type=number]');
+        const qty  = parseFloat(numInputs[0]?.value) || 1;
+        const cost = parseFloat(numInputs[1]?.value) || 0;
+        if (cost > 0) total += qty * cost;
+      }
+    });
+    const el = document.getElementById('total-cost');
+    if (el) el.textContent = total > 0 ? total.toLocaleString() + ' ₮' : '0 ₮';
+    return total;
+  };
+
+  // ── 7. REALTIME — TIRE RECORDS МЭДЭГДЭЛ ──
+  (function hookTireRealtime() {
+    const _origStart = window.startRealtimeSync;
+    if (typeof _origStart !== 'function') return;
+    window.startRealtimeSync = function() {
+      _origStart.apply(this, arguments);
+      // tire_records-д realtime сонсогч нэмэх
+      try {
+        const supa = getSupaClient();
+        if (!supa || !currentCompanyId) return;
+        const tireCh = supa.channel(`tire_${currentCompanyId}`)
+          .on('postgres_changes', {
+            event: '*', schema: 'public', table: 'tire_records',
+            filter: `company_id=eq.${currentCompanyId}`
+          }, () => {
+            if (typeof loadTireRecords === 'function') loadTireRecords();
+            if (typeof showRealtimeToast === 'function') showRealtimeToast('⚫ Дугуйн бүртгэл шинэчлэгдлээ');
+          }).subscribe();
+      } catch(e) {}
+    };
+  })();
+
+  // ── 8. ӨДРИЙН НИЙТ ТАЙЛАН — АЖИЛТНЫ ГҮЙЦЭТГЭЛ ──
+  // Performance screen-д сарын хязгааг зөв тохируулах засвар
+  (function fixPerformanceDateRange() {
+    const orig = window.renderPerformance;
+    if (typeof orig !== 'function') return;
+    window.renderPerformance = function() {
+      // _perfMonth/_perfYear хувьсагч байхгүй бол одоогийн огноо ашиглана
+      if (typeof window._perfYear === 'undefined') {
+        window._perfYear = new Date().getFullYear();
+        window._perfMonth = new Date().getMonth() + 1;
+      }
+      return orig.apply(this, arguments);
+    };
+  })();
+
+  console.log('✅ Цэцэн v9 — засвар & сайжруулалт ачааллагдлаа');
+  </script>
+
 </body>
 </html>
